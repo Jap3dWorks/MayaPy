@@ -1,4 +1,5 @@
 from PySide2 import QtWidgets, QtCore, QtGui
+import PySide2
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import pymel.core as pm
@@ -40,8 +41,17 @@ class splineDistributeUI(QtWidgets.QWidget):
         # create grid
         layout = QtWidgets.QGridLayout(self)
         increment = QtWidgets.QLineEdit('Increment')
-        layout.addWidget(increment,0,0)
+        # increment.setMaxLength(5) max digits
+        layout.addWidget(increment, 0, 0, 0, 1)
 
+        generate = QtWidgets.QPushButton('Generate')
+        layout.addWidget(generate,2 ,0)
+
+        refresh = QtWidgets.QPushButton('Refresh')
+        layout.addWidget(refresh, 2, 1)
+
+        bake = QtWidgets.QPushButton('Bake')
+        layout.addWidget(bake,2,2)
 
 
 
