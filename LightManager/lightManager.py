@@ -213,7 +213,7 @@ class LightingManager(QtWidgets.QWidget):
         # container widget to our light widgets
         scrollWidget = QtWidgets.QWidget()
         scrollWidget.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
-        self.scrollLayout = QtWidgets.QVBoxLayout(scrollWidget)
+        self.scrollLayout = QtWidgets.QVBoxLayout(scrollWidget) # here will be the light widgets, aply the layout to the widget
 
         # scrollArea
         scrollArea = QtWidgets.QScrollArea()
