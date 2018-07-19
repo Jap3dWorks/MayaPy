@@ -6,12 +6,8 @@ import pymel.core as pm
 
 import logging
 logging.basicConfig()
-lHandler = logging.Handler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-lHandler.setFormatter(formatter)
 logger = logging.getLogger('Spline Distribute UI')
 logger.setLevel(logging.DEBUG)
-logger.addHandler(lHandler)
 
 class splineDistributeUI(QtWidgets.QWidget):
     def __init__(self, dock = True):
@@ -38,24 +34,48 @@ class splineDistributeUI(QtWidgets.QWidget):
         self.parent().layout().addWidget(self)
 
     def buildUI(self):
-        # general grid, i will try to create trhee grids and put them un a general grid
+        def QDoubleSpinDef():
+            qDoubleSpin = QtWidgets.QDoubleSpinBox()
+            qDoubleSpin.setRange(0, 500)
+            qDoubleSpin.setSingleStep(.1)
+            return qDoubleSpin
+
+        # general grid, i will try to create three grids and put them un a general grid
         layoutGeneral = QtWidgets.QGridLayout(self)
         layoutGeneral.setAlignment(QtCore.Qt.AlignHCenter)
+        # validator = QtGui.QDoubleValidator()
+        # validator.setDecimals(2)
+        # validator.setBottom(0)
+        # validator.setTop(500)
+
 
         # create grid A <- ^
         layoutAWidget = QtWidgets.QWidget()
         layoutAWidget.setMaximumWidth(200)
         layoutA = QtWidgets.QGridLayout(layoutAWidget)
-        layoutA.setAlignment(QtCore.Qt.AlignTop)
+        # layoutA.setAlignment(QtCore.Qt.AlignTop)
         layoutGeneral.addWidget(layoutAWidget, 0, 0)
         # elements Grid A
         incrementLabel = QtWidgets.QLabel('Increment:')
         layoutA.addWidget(incrementLabel, 0, 0)
         BboxCBx = QtWidgets.QCheckBox('BBox')
-        layoutA.addWidget(BboxCBx,0,1)
-        increment = QtWidgets.QLineEdit('00')
+        layoutA.addWidget(BboxCBx, 0, 1)
+        increment = QtWidgets.QDoubleSpinBox()
+        increment.setRange(-500, 500)
+        increment.setSingleStep(.1)
         # increment.setMaxLength(5)-->max digits
-        layoutA.addWidget(increment, 1, 0,1,2)
+        layoutA.addWidget(increment, 1, 0, 1, 2)
+
+        # Container Widget
+        scrollWidget = QtWidgets.QWidget()
+        scrollWidget.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum) #adaptable
+        self.scrollLayout = QtWidgets.QVBoxLayout(scrollWidget)
+        # now set that our widget have an scroll, this is a scroll area
+        scrollArea = QtWidgets.QScrollArea()
+        scrollArea.setWidgetResizable(True)
+        # aply to scrollWidget
+        scrollArea.setWidget(scrollWidget)
+        layoutGeneral.addWidget(scrollArea, 1, 0, 2, 1)
 
 
         # create grid RandomTrn -> random Tranlate
@@ -72,17 +92,17 @@ class splineDistributeUI(QtWidgets.QWidget):
         # X random
         XrndTLbl = QtWidgets.QLabel('X:')
         layoutB.addWidget(XrndTLbl, 1, 0)
-        XTrnRnd = QtWidgets.QLineEdit('00')
+        XTrnRnd = QDoubleSpinDef()
         layoutB.addWidget(XTrnRnd, 2, 0)
         # Y random
         YrndTLbl = QtWidgets.QLabel('Y:')
         layoutB.addWidget(YrndTLbl, 1,1)
-        YTrnRnd = QtWidgets.QLineEdit('00')
+        YTrnRnd = QDoubleSpinDef()
         layoutB.addWidget(YTrnRnd, 2, 1)
         # Z random
         ZrndTLbl = QtWidgets.QLabel('Z:')
         layoutB.addWidget(ZrndTLbl, 1, 2)
-        ZTrnRnd = QtWidgets.QLineEdit('00')
+        ZTrnRnd = QDoubleSpinDef()
         layoutB.addWidget(ZTrnRnd, 2, 2)
 
         # create grid RandomRo -> random Rotation
@@ -99,17 +119,17 @@ class splineDistributeUI(QtWidgets.QWidget):
         # X random
         XrndRLbl = QtWidgets.QLabel('X:')
         layRRo.addWidget(XrndRLbl, 1, 0)
-        XRoRnd = QtWidgets.QLineEdit('00')
+        XRoRnd = QDoubleSpinDef()
         layRRo.addWidget(XRoRnd, 2, 0)
         # Y random
         YrndRLbl = QtWidgets.QLabel('Y:')
         layRRo.addWidget(YrndRLbl, 1,1)
-        YRoRnd = QtWidgets.QLineEdit('00')
+        YRoRnd = QDoubleSpinDef()
         layRRo.addWidget(YRoRnd, 2, 1)
         # Z random
         ZrndRLbl = QtWidgets.QLabel('Z:')
         layRRo.addWidget(ZrndRLbl, 1, 2)
-        ZRoRnd = QtWidgets.QLineEdit('00')
+        ZRoRnd = QDoubleSpinDef()
         layRRo.addWidget(ZRoRnd, 2, 2)
 
         # create grid RandomSc -> Scale Rotation
@@ -125,23 +145,25 @@ class splineDistributeUI(QtWidgets.QWidget):
         lblWidLay = QtWidgets.QGridLayout(lblWidget)
         layRScLab = QtWidgets.QLabel('Scale Random:')
         lblWidLay.addWidget(layRScLab, 0, 0)
+        # checkBox xz Same Scale random
         checkBxScXZ = QtWidgets.QCheckBox('XZ lock')
+        checkBxScXZ.stateChanged.connect(lambda x: ZScRnd.setEnabled(not(bool(x))))
         lblWidLay.addWidget(checkBxScXZ,0,1)
         layRSc.addWidget(lblWidget, 0, 0, 1, 3)
         # X random
         XrndScLbl = QtWidgets.QLabel('X:')
         layRSc.addWidget(XrndScLbl, 1, 0)
-        XScRnd = QtWidgets.QLineEdit('00')
+        XScRnd = QDoubleSpinDef()
         layRSc.addWidget(XScRnd, 2, 0)
         # Y random
         YrndScLbl = QtWidgets.QLabel('Y:')
         layRSc.addWidget(YrndScLbl, 1, 1)
-        YScRnd = QtWidgets.QLineEdit('00')
+        YScRnd = QDoubleSpinDef()
         layRSc.addWidget(YScRnd, 2, 1)
         # Z random
         ZrndScLbl = QtWidgets.QLabel('Z:')
         layRSc.addWidget(ZrndScLbl, 1, 2)
-        ZScRnd = QtWidgets.QLineEdit('00')
+        ZScRnd = QDoubleSpinDef()
         layRSc.addWidget(ZScRnd, 2, 2)
 
         # create grid Buttons _
@@ -157,7 +179,6 @@ class splineDistributeUI(QtWidgets.QWidget):
 
         bake = QtWidgets.QPushButton('Bake')
         layoutC.addWidget(bake,0,2)
-
 
 
 
