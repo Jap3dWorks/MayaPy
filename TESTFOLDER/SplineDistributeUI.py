@@ -2,7 +2,7 @@ from PySide2 import QtWidgets, QtCore, QtGui
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import pymel.core as pm
-# from TESTFOLDER import splineDistribute
+from TESTFOLDER import splineDistribute
 
 import logging
 logging.basicConfig()
@@ -32,7 +32,7 @@ class splineDistributeUI(QtWidgets.QWidget):
 
         self.buildUI()
         self.parent().layout().addWidget(self)
-        # self.distributeObj = None
+        self.distributeObj = None
 
     def buildUI(self):
         def QDoubleSpinDef():
@@ -49,7 +49,6 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutAWidget = QtWidgets.QWidget()
         layoutAWidget.setMaximumWidth(200)
         layoutA = QtWidgets.QGridLayout(layoutAWidget)
-        # layoutA.setAlignment(QtCore.Qt.AlignTop)
         layoutGeneral.addWidget(layoutAWidget, 0, 0)
         # elements Grid A
         incrementLabel = QtWidgets.QLabel('Increment:')
@@ -167,7 +166,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutGeneral.addWidget(layoutCWidget, 3, 0, 1, 2)
 
         generate = QtWidgets.QPushButton('Generate')
-        # generate.clicked.connect(self.generate)
+        generate.clicked.connect(self.generate)
         layoutC.addWidget(generate,0 ,0)
 
         refresh = QtWidgets.QPushButton('Refresh')
@@ -176,26 +175,23 @@ class splineDistributeUI(QtWidgets.QWidget):
         bake = QtWidgets.QPushButton('Bake')
         layoutC.addWidget(bake,0,2)
 
-'''
     def generate(self):
         # if another instance of the class is in scene, bake the old objects
-        
-        try:
-            if isinstance(self.distributeObj, splineDistribute.splineDistribute):
-                logger.info('Previus distributed objects find')
-                self.distributeObj.bakePositions()
-        except:
-            logger.debug('No previus distributen find')
-        
+        currectSelection = pm.ls(sl=True)
+        if self.distributeObj != None:
+            logger.info('Previus distributed objects find and baked')
+            self.distributeObj.bakePositions()
+        else:
+            self.distributeObj = splineDistribute.splineDistribute()
+            logger.debug('creating class object splineDistribute()')
         # create new isntance os the class
         logger.info('Distributing objects')
-        self.distributeObj = splineDistribute.splineDistribute()
+        pm.select(currectSelection, r=True)
         self.distributeObj.saveObjects()
         self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
                                  float(self.XTrnRnd.value()), float(self.YTrnRnd.value()), float(self.ZTrnRnd.value()),
                                  float(self.XRoRnd.value()), float(self.YRoRnd.value()), float(self.ZRoRnd.value()),
                                  float(self.XScRnd.value()), float(self.YScRnd.value()), float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
-'''
 
 # can't be a static method class
 def getDock(name = 'splineDistributeUIDock'):
