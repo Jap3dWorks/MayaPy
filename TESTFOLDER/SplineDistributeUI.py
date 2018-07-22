@@ -3,6 +3,7 @@ import PySide2
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import pymel.core as pm
+from TESTFOLDER import splineDistribute
 
 import logging
 logging.basicConfig()
@@ -32,6 +33,7 @@ class splineDistributeUI(QtWidgets.QWidget):
 
         self.buildUI()
         self.parent().layout().addWidget(self)
+        self.distributeObj = None
 
     def buildUI(self):
         def QDoubleSpinDef():
@@ -58,13 +60,13 @@ class splineDistributeUI(QtWidgets.QWidget):
         # elements Grid A
         incrementLabel = QtWidgets.QLabel('Increment:')
         layoutA.addWidget(incrementLabel, 0, 0)
-        BboxCBx = QtWidgets.QCheckBox('BBox')
-        layoutA.addWidget(BboxCBx, 0, 1)
-        increment = QtWidgets.QDoubleSpinBox()
-        increment.setRange(-500, 500)
-        increment.setSingleStep(.1)
-        # increment.setMaxLength(5)-->max digits
-        layoutA.addWidget(increment, 1, 0, 1, 2)
+        self.BboxCBx = QtWidgets.QCheckBox('BBox')
+        layoutA.addWidget(self.BboxCBx, 0, 1)
+        self.increment = QtWidgets.QDoubleSpinBox()
+        self.increment.setRange(-500, 500)
+        self.increment.setSingleStep(.1)
+        # self.increment.setMaxLength(5)-->max digits
+        layoutA.addWidget(self.increment, 1, 0, 1, 2)
 
         # Container Widget
         scrollWidget = QtWidgets.QWidget()
@@ -92,18 +94,18 @@ class splineDistributeUI(QtWidgets.QWidget):
         # X random
         XrndTLbl = QtWidgets.QLabel('X:')
         layoutB.addWidget(XrndTLbl, 1, 0)
-        XTrnRnd = QDoubleSpinDef()
-        layoutB.addWidget(XTrnRnd, 2, 0)
+        self.XTrnRnd = QDoubleSpinDef()
+        layoutB.addWidget(self.XTrnRnd, 2, 0)
         # Y random
         YrndTLbl = QtWidgets.QLabel('Y:')
         layoutB.addWidget(YrndTLbl, 1,1)
-        YTrnRnd = QDoubleSpinDef()
-        layoutB.addWidget(YTrnRnd, 2, 1)
+        self.YTrnRnd = QDoubleSpinDef()
+        layoutB.addWidget(self.YTrnRnd, 2, 1)
         # Z random
         ZrndTLbl = QtWidgets.QLabel('Z:')
         layoutB.addWidget(ZrndTLbl, 1, 2)
-        ZTrnRnd = QDoubleSpinDef()
-        layoutB.addWidget(ZTrnRnd, 2, 2)
+        self.ZTrnRnd = QDoubleSpinDef()
+        layoutB.addWidget(self.ZTrnRnd, 2, 2)
 
         # create grid RandomRo -> random Rotation
         # qwidget that containt the grid
@@ -119,18 +121,18 @@ class splineDistributeUI(QtWidgets.QWidget):
         # X random
         XrndRLbl = QtWidgets.QLabel('X:')
         layRRo.addWidget(XrndRLbl, 1, 0)
-        XRoRnd = QDoubleSpinDef()
-        layRRo.addWidget(XRoRnd, 2, 0)
+        self.XRoRnd = QDoubleSpinDef()
+        layRRo.addWidget(self.XRoRnd, 2, 0)
         # Y random
         YrndRLbl = QtWidgets.QLabel('Y:')
         layRRo.addWidget(YrndRLbl, 1,1)
-        YRoRnd = QDoubleSpinDef()
-        layRRo.addWidget(YRoRnd, 2, 1)
+        self.YRoRnd = QDoubleSpinDef()
+        layRRo.addWidget(self.YRoRnd, 2, 1)
         # Z random
         ZrndRLbl = QtWidgets.QLabel('Z:')
         layRRo.addWidget(ZrndRLbl, 1, 2)
-        ZRoRnd = QDoubleSpinDef()
-        layRRo.addWidget(ZRoRnd, 2, 2)
+        self.ZRoRnd = QDoubleSpinDef()
+        layRRo.addWidget(self.ZRoRnd, 2, 2)
 
         # create grid RandomSc -> Scale Rotation
         # qwidget that containt the grid
@@ -146,25 +148,25 @@ class splineDistributeUI(QtWidgets.QWidget):
         layRScLab = QtWidgets.QLabel('Scale Random:')
         lblWidLay.addWidget(layRScLab, 0, 0)
         # checkBox xz Same Scale random
-        checkBxScXZ = QtWidgets.QCheckBox('XZ lock')
-        checkBxScXZ.stateChanged.connect(lambda x: ZScRnd.setEnabled(not(bool(x))))
-        lblWidLay.addWidget(checkBxScXZ,0,1)
+        self.checkBxScXZ = QtWidgets.QCheckBox('XZ lock')
+        self.checkBxScXZ.stateChanged.connect(lambda x: self.ZScRnd.setEnabled(not(bool(x))))
+        lblWidLay.addWidget(self.checkBxScXZ,0,1)
         layRSc.addWidget(lblWidget, 0, 0, 1, 3)
         # X random
         XrndScLbl = QtWidgets.QLabel('X:')
         layRSc.addWidget(XrndScLbl, 1, 0)
-        XScRnd = QDoubleSpinDef()
-        layRSc.addWidget(XScRnd, 2, 0)
+        self.XScRnd = QDoubleSpinDef()
+        layRSc.addWidget(self.XScRnd, 2, 0)
         # Y random
         YrndScLbl = QtWidgets.QLabel('Y:')
         layRSc.addWidget(YrndScLbl, 1, 1)
-        YScRnd = QDoubleSpinDef()
-        layRSc.addWidget(YScRnd, 2, 1)
+        self.YScRnd = QDoubleSpinDef()
+        layRSc.addWidget(self.YScRnd, 2, 1)
         # Z random
         ZrndScLbl = QtWidgets.QLabel('Z:')
         layRSc.addWidget(ZrndScLbl, 1, 2)
-        ZScRnd = QDoubleSpinDef()
-        layRSc.addWidget(ZScRnd, 2, 2)
+        self.ZScRnd = QDoubleSpinDef()
+        layRSc.addWidget(self.ZScRnd, 2, 2)
 
         # create grid Buttons _
         layoutCWidget = QtWidgets.QWidget()
@@ -172,6 +174,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutGeneral.addWidget(layoutCWidget, 3, 0, 1, 2)
 
         generate = QtWidgets.QPushButton('Generate')
+        generate.clicked.connect(self.generate)
         layoutC.addWidget(generate,0 ,0)
 
         refresh = QtWidgets.QPushButton('Refresh')
@@ -180,9 +183,25 @@ class splineDistributeUI(QtWidgets.QWidget):
         bake = QtWidgets.QPushButton('Bake')
         layoutC.addWidget(bake,0,2)
 
+    def generate(self):
+        # if another instance of the class is in scene, bake the old objects
+        try:
+            if isinstance(self.distributeObj, splineDistribute.splineDistribute):
+                logger.info('Previus distributed objects find')
+                self.distributeObj.bakePositions()
+        except:
+            logger.debug('No previus distributen find')
+        # create new isntance os the class
+        logger.info('Distributing objects')
+        self.distributeObj = splineDistribute.splineDistribute()
+        self.distributeObj.saveObjects()
+        self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
+                                 float(self.XTrnRnd.value()), float(self.YTrnRnd.value()), float(self.ZTrnRnd.value()),
+                                 float(self.XRoRnd.value()), float(self.YRoRnd.value()), float(self.ZRoRnd.value()),
+                                 float(self.XScRnd.value()), float(self.YScRnd.value()), float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
 
 
-# don't know why, this cant be a @staticmethod inside the class
+# can't be a static method class
 def getDock(name = 'splineDistributeUIDock'):
     deleteDock(name)
 

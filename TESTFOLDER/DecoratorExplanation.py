@@ -58,12 +58,15 @@ def eggs(func):
 def eggsShit(func):
     print ('this is shit')
     @wraps(func)
-    def wrapper(*args, **kwargs): # create tuple and dictionaries from values
+    def wrapper(x=5, y=5 ,*args, **kwargs): # create tuple and dictionaries from values
         print ('this is wrapper')
         print (type(args), type(kwargs))
         ret = func(*args, **kwargs) # decompose the tuple and dictionaries into values0, values1, ...
         print ('eggsShit is done')
-        return ret
+        print (x+y)
+        # return ret
+
+    print (x + y)
     return wrapper
 
 
@@ -71,7 +74,10 @@ def eggsShit(func):
 def goodbye(name = 'mary'):
     print('goodbye, %s' %name)
 
+goodbye(x=13, name='Rose')
 
-goodbye()
+wraperr= eggsShit()
+wraperr()
 
-print(goodbye.__name__)
+
+# print(goodbye.__name__)
