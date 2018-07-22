@@ -1,9 +1,8 @@
 from PySide2 import QtWidgets, QtCore, QtGui
-import PySide2
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import pymel.core as pm
-from TESTFOLDER import splineDistribute
+# from TESTFOLDER import splineDistribute
 
 import logging
 logging.basicConfig()
@@ -11,7 +10,7 @@ logger = logging.getLogger('Spline Distribute UI')
 logger.setLevel(logging.DEBUG)
 
 class splineDistributeUI(QtWidgets.QWidget):
-    def __init__(self, dock = True):
+    def __init__(self, dock=True):
         if dock:
             parent = getDock()
         else:
@@ -27,13 +26,13 @@ class splineDistributeUI(QtWidgets.QWidget):
             parent.setWindowTitle('Spline Distribute')
 
             # add a layout
-            dlgLayout = QtWidgets.QBoxLayout(parent)
+            dlgLayout = QtWidgets.QVBoxLayout(parent)
 
         super(splineDistributeUI, self).__init__(parent=parent)
 
         self.buildUI()
         self.parent().layout().addWidget(self)
-        self.distributeObj = None
+        # self.distributeObj = None
 
     def buildUI(self):
         def QDoubleSpinDef():
@@ -45,11 +44,6 @@ class splineDistributeUI(QtWidgets.QWidget):
         # general grid, i will try to create three grids and put them un a general grid
         layoutGeneral = QtWidgets.QGridLayout(self)
         layoutGeneral.setAlignment(QtCore.Qt.AlignHCenter)
-        # validator = QtGui.QDoubleValidator()
-        # validator.setDecimals(2)
-        # validator.setBottom(0)
-        # validator.setTop(500)
-
 
         # create grid A <- ^
         layoutAWidget = QtWidgets.QWidget()
@@ -78,7 +72,6 @@ class splineDistributeUI(QtWidgets.QWidget):
         # aply to scrollWidget
         scrollArea.setWidget(scrollWidget)
         layoutGeneral.addWidget(scrollArea, 1, 0, 2, 1)
-
 
         # create grid RandomTrn -> random Tranlate
         # qwidget that containt the grid
@@ -174,7 +167,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutGeneral.addWidget(layoutCWidget, 3, 0, 1, 2)
 
         generate = QtWidgets.QPushButton('Generate')
-        generate.clicked.connect(self.generate)
+        # generate.clicked.connect(self.generate)
         layoutC.addWidget(generate,0 ,0)
 
         refresh = QtWidgets.QPushButton('Refresh')
@@ -183,14 +176,17 @@ class splineDistributeUI(QtWidgets.QWidget):
         bake = QtWidgets.QPushButton('Bake')
         layoutC.addWidget(bake,0,2)
 
+'''
     def generate(self):
         # if another instance of the class is in scene, bake the old objects
+        
         try:
             if isinstance(self.distributeObj, splineDistribute.splineDistribute):
                 logger.info('Previus distributed objects find')
                 self.distributeObj.bakePositions()
         except:
             logger.debug('No previus distributen find')
+        
         # create new isntance os the class
         logger.info('Distributing objects')
         self.distributeObj = splineDistribute.splineDistribute()
@@ -199,7 +195,7 @@ class splineDistributeUI(QtWidgets.QWidget):
                                  float(self.XTrnRnd.value()), float(self.YTrnRnd.value()), float(self.ZTrnRnd.value()),
                                  float(self.XRoRnd.value()), float(self.YRoRnd.value()), float(self.ZRoRnd.value()),
                                  float(self.XScRnd.value()), float(self.YScRnd.value()), float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
-
+'''
 
 # can't be a static method class
 def getDock(name = 'splineDistributeUIDock'):
