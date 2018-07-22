@@ -2,8 +2,13 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="4acc31a2-8bba-40eb-8dc7-c6604ae2bf64" name="Default" comment="">
+      <change afterPath="$PROJECT_DIR$/TESTFOLDER/splineDistribute.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/TESTFOLDER/SplineDistributeUI.py" beforeDir="false" afterPath="$PROJECT_DIR$/TESTFOLDER/SplineDistributeUI.py" afterDir="false" />
+<<<<<<< HEAD
+=======
+      <change beforePath="$PROJECT_DIR$/TESTFOLDER/Test.py" beforeDir="false" afterPath="$PROJECT_DIR$/TESTFOLDER/Test.py" afterDir="false" />
+>>>>>>> parent of cd99af4... splineDistribute updates
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -20,7 +25,7 @@
       <file leaf-file-name="__init__.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/Tools/__init__.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="50">
+            <state>
               <caret line="2" column="28" selection-start-line="2" selection-start-column="28" selection-end-line="2" selection-end-column="28" />
             </state>
           </provider>
@@ -30,7 +35,7 @@
         <entry file="file://$PROJECT_DIR$/TESTFOLDER/Test.py">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="200">
-              <caret line="8" selection-start-line="8" selection-end-line="8" />
+              <caret line="8" lean-forward="true" selection-start-line="8" selection-end-line="8" />
             </state>
           </provider>
         </entry>
@@ -79,11 +84,16 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="SplineDistributeUI.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="SplineDistributeUI.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/TESTFOLDER/SplineDistributeUI.py">
           <provider selected="true" editor-type-id="text-editor">
+<<<<<<< HEAD
             <state relative-caret-position="523">
               <caret line="218" column="35" lean-forward="true" selection-start-line="218" selection-start-column="35" selection-end-line="218" selection-end-column="35" />
+=======
+            <state relative-caret-position="394">
+              <caret line="41" lean-forward="true" selection-start-line="41" selection-end-line="41" />
+>>>>>>> parent of cd99af4... splineDistribute updates
               <folding>
                 <element signature="e#0#44#0" expanded="true" />
               </folding>
@@ -91,6 +101,7 @@
           </provider>
         </entry>
       </file>
+<<<<<<< HEAD
       <file leaf-file-name="lightManager.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/LightManager/lightManager.py">
           <provider selected="true" editor-type-id="text-editor">
@@ -120,10 +131,32 @@
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="627">
               <caret line="57" column="17" selection-start-line="57" selection-start-column="17" selection-end-line="57" selection-end-column="17" />
+=======
+      <file leaf-file-name="splineDistribute.py" pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/TESTFOLDER/splineDistribute.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="75">
+              <caret line="3" column="30" lean-forward="true" selection-start-line="1" selection-end-line="3" selection-end-column="30" />
+>>>>>>> parent of cd99af4... splineDistribute updates
             </state>
           </provider>
         </entry>
       </file>
+<<<<<<< HEAD
+=======
+      <file leaf-file-name="lightManager.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/LightManager/lightManager.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="600">
+              <caret line="24" column="34" lean-forward="true" selection-start-line="24" selection-start-column="34" selection-end-line="25" selection-end-column="33" />
+              <folding>
+                <element signature="e#0#11#0" expanded="true" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+>>>>>>> parent of cd99af4... splineDistribute updates
     </leaf>
   </component>
   <component name="FileTemplateManagerImpl">
@@ -149,12 +182,12 @@
         <option value="$PROJECT_DIR$/LightManager/lightManagerExample.py" />
         <option value="$PROJECT_DIR$/Tools/renamer.py" />
         <option value="$PROJECT_DIR$/customCommands/helloWorldCmd.py" />
+        <option value="$PROJECT_DIR$/TESTFOLDER/DecoratorExplanation.py" />
         <option value="$PROJECT_DIR$/customCommands/distributeCmd.py" />
         <option value="$PROJECT_DIR$/TESTFOLDER/__init__.py" />
         <option value="$PROJECT_DIR$/LightManager/lightManager.py" />
-        <option value="$PROJECT_DIR$/TESTFOLDER/Test.py" />
-        <option value="$PROJECT_DIR$/TESTFOLDER/DecoratorExplanation.py" />
         <option value="$PROJECT_DIR$/TESTFOLDER/splineDistribute.py" />
+        <option value="$PROJECT_DIR$/TESTFOLDER/Test.py" />
         <option value="$PROJECT_DIR$/TESTFOLDER/SplineDistributeUI.py" />
       </list>
     </option>
@@ -170,7 +203,7 @@
     <scope name="Unnamed" pattern="" />
   </component>
   <component name="ProjectFrameBounds" extendedState="6">
-    <option name="x" value="330" />
+    <option name="x" value="331" />
     <option name="width" value="1600" />
     <option name="height" value="1017" />
   </component>
@@ -211,7 +244,7 @@
   <component name="PropertiesComponent">
     <property name="TODO_SCOPE" value="Module 'MayaPy'" />
     <property name="last_opened_file_path" value="C:/Program Files/Git/bin/git.exe" />
-    <property name="settings.editor.selected.configurable" value="reference.settingsdialog.IDE.editor.colors" />
+    <property name="settings.editor.selected.configurable" value="vcs.Git" />
     <property name="settings.editor.splitter.proportion" value="0.20632638" />
   </component>
   <component name="RecentsManager">
@@ -232,7 +265,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.DecoratorExplanation">
+  <component name="RunManager" selected="Python.SplineDistributeUI">
     <configuration name="DecoratorExplanation" type="PythonConfigurationType" factoryName="Python" temporary="true">
       <module name="MayaPy" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -332,9 +365,9 @@
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.DecoratorExplanation" />
         <item itemvalue="Python.SplineDistributeUI" />
         <item itemvalue="Python.distributeCmd" />
+        <item itemvalue="Python.DecoratorExplanation" />
         <item itemvalue="Python.Test" />
         <item itemvalue="Python.renamer" />
       </list>
@@ -370,24 +403,33 @@
     <frame x="-8" y="-8" width="1936" height="1056" extended-state="6" />
     <editor active="true" />
     <layout>
+<<<<<<< HEAD
       <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.59310347" visible="true" weight="0.15173867" />
+=======
+      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.5984456" visible="true" weight="0.15173867" />
+>>>>>>> parent of cd99af4... splineDistribute updates
       <window_info anchor="bottom" id="TODO" order="6" sideWeight="0.49736565" weight="0.22943723" />
-      <window_info anchor="bottom" id="Event Log" order="7" sideWeight="0.5231823" side_tool="true" visible="true" weight="0.21023965" />
+      <window_info anchor="bottom" id="Event Log" order="7" sideWeight="0.50105375" side_tool="true" visible="true" weight="0.16450216" />
       <window_info anchor="bottom" id="Maya Log" order="8" sideWeight="0.5537408" weight="0.33982685" />
+      <window_info anchor="bottom" id="Find" order="1" sideWeight="0.49894625" weight="0.32900432" />
       <window_info anchor="bottom" id="Version Control" order="9" />
       <window_info anchor="bottom" id="Python Console" order="11" sideWeight="0.49315068" weight="0.1991342" />
+<<<<<<< HEAD
       <window_info anchor="bottom" id="Run" order="2" sideWeight="0.49209693" weight="0.28867102" />
       <window_info id="Structure" order="1" sideWeight="0.40689656" side_tool="true" visible="true" weight="0.15173867" />
+=======
+      <window_info anchor="bottom" id="Run" order="2" sideWeight="0.49367756" weight="0.43934426" />
+      <window_info id="Structure" order="1" sideWeight="0.4015544" side_tool="true" visible="true" weight="0.15173867" />
+>>>>>>> parent of cd99af4... splineDistribute updates
       <window_info anchor="bottom" id="Terminal" order="10" sideWeight="0.49525815" weight="0.3365801" />
       <window_info id="Favorites" order="2" sideWeight="0.58146065" side_tool="true" weight="0.1849315" />
-      <window_info anchor="bottom" id="Debug" order="3" sideWeight="0.4768177" weight="0.21023965" />
+      <window_info anchor="bottom" id="Debug" order="3" sideWeight="0.4789252" weight="0.19264069" />
       <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
       <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
-      <window_info anchor="bottom" id="Find" order="1" sideWeight="0.49894625" weight="0.32900432" />
     </layout>
   </component>
   <component name="VcsContentAnnotationSettings">
@@ -426,6 +468,9 @@
           <caret line="221" column="48" lean-forward="true" selection-start-line="221" selection-start-column="48" selection-end-line="221" selection-end-column="48" />
           <caret line="220" lean-forward="true" selection-start-line="220" selection-end-line="220" />
           <caret line="219" column="43" lean-forward="true" selection-start-line="219" selection-start-column="43" selection-end-line="219" selection-end-column="43" />
+          <folding>
+            <element signature="e#0#11#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
@@ -454,6 +499,9 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="2325">
           <caret line="102" column="40" lean-forward="true" selection-start-line="102" selection-start-column="40" selection-end-line="102" selection-end-column="40" />
+          <folding>
+            <element signature="e#0#11#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
@@ -475,6 +523,9 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="8325">
           <caret line="342" column="23" selection-start-line="342" selection-start-column="23" selection-end-line="342" selection-end-column="23" />
+          <folding>
+            <element signature="e#0#11#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
@@ -496,6 +547,9 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="7625">
           <caret line="314" column="19" selection-start-line="314" selection-start-column="8" selection-end-line="314" selection-end-column="19" />
+          <folding>
+            <element signature="e#0#11#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
@@ -517,6 +571,9 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="100">
           <caret line="11" selection-start-line="11" selection-end-line="11" />
+          <folding>
+            <element signature="e#0#11#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
@@ -538,6 +595,9 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="680">
           <caret line="47" column="26" selection-start-line="47" selection-start-column="21" selection-end-line="47" selection-end-column="26" />
+          <folding>
+            <element signature="e#0#11#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
@@ -609,7 +669,7 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/Tools/__init__.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="50">
+        <state>
           <caret line="2" column="28" selection-start-line="2" selection-start-column="28" selection-end-line="2" selection-end-column="28" />
         </state>
       </provider>
@@ -629,6 +689,13 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="3025">
           <caret line="121" column="25" selection-start-line="121" selection-start-column="18" selection-end-line="121" selection-end-column="25" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/TESTFOLDER/DecoratorExplanation.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1850">
+          <caret line="74" column="9" selection-start-line="74" selection-start-column="9" selection-end-line="74" selection-end-column="9" />
         </state>
       </provider>
     </entry>
@@ -691,6 +758,16 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/customCommands/distributeCmd.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="2775">
+          <caret line="112" column="38" selection-start-line="112" selection-start-column="38" selection-end-line="112" selection-end-column="38" />
+          <folding>
+            <element signature="e#0#31#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/TESTFOLDER/__init__.py">
       <provider selected="true" editor-type-id="text-editor" />
     </entry>
@@ -710,6 +787,7 @@
         </state>
       </provider>
     </entry>
+<<<<<<< HEAD
     <entry file="file://$PROJECT_DIR$/TESTFOLDER/Test.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="200">
@@ -721,12 +799,19 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="2775">
           <caret line="112" column="38" selection-start-line="112" selection-start-column="38" selection-end-line="112" selection-end-column="38" />
+=======
+    <entry file="file://$PROJECT_DIR$/LightManager/lightManager.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="600">
+          <caret line="24" column="34" lean-forward="true" selection-start-line="24" selection-start-column="34" selection-end-line="25" selection-end-column="33" />
+>>>>>>> parent of cd99af4... splineDistribute updates
           <folding>
-            <element signature="e#0#31#0" expanded="true" />
+            <element signature="e#0#11#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
+<<<<<<< HEAD
     <entry file="file://$PROJECT_DIR$/TESTFOLDER/splineDistribute.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="3000">
@@ -741,6 +826,12 @@
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="627">
           <caret line="57" column="17" selection-start-line="57" selection-start-column="17" selection-end-line="57" selection-end-column="17" />
+=======
+    <entry file="file://$PROJECT_DIR$/TESTFOLDER/Test.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="200">
+          <caret line="8" lean-forward="true" selection-start-line="8" selection-end-line="8" />
+>>>>>>> parent of cd99af4... splineDistribute updates
         </state>
       </provider>
     </entry>
@@ -756,11 +847,23 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/TESTFOLDER/SplineDistributeUI.py">
       <provider selected="true" editor-type-id="text-editor">
+<<<<<<< HEAD
         <state relative-caret-position="523">
           <caret line="218" column="35" lean-forward="true" selection-start-line="218" selection-start-column="35" selection-end-line="218" selection-end-column="35" />
+=======
+        <state relative-caret-position="394">
+          <caret line="41" lean-forward="true" selection-start-line="41" selection-end-line="41" />
+>>>>>>> parent of cd99af4... splineDistribute updates
           <folding>
             <element signature="e#0#44#0" expanded="true" />
           </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/TESTFOLDER/splineDistribute.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="75">
+          <caret line="3" column="30" lean-forward="true" selection-start-line="1" selection-end-line="3" selection-end-column="30" />
         </state>
       </provider>
     </entry>
