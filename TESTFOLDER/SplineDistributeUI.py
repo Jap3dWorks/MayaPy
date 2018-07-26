@@ -4,6 +4,7 @@ from maya import OpenMayaUI as omui
 import pymel.core as pm
 from TESTFOLDER import splineDistribute
 reload(splineDistribute)
+import re
 
 import logging
 logging.basicConfig()
@@ -14,6 +15,23 @@ class splineDistributeInfo(QtWidgets.QWidget):
     """
     this class should be a way to show info for the splinedistributeUI class
     """
+    def __init__(self, curveGrp):
+        super(splineDistributeInfo, self).__init__()
+        if isinstance(curveGrp, basestring):
+            logger.debug('converting to pyNode: %s' % curveGrp)
+            curveGrp = pm.PyNode(curveGrp)
+
+        self.curveGrp = curveGrp
+        self.buildUI(self.curveGrp)
+
+    def buildUI(self, curveGrp):
+        layout = QtWidgets.QGridLayout(self)
+        layout.setAlignment(QtCore.Qt.AlignTop)
+        layout.setAlignment(QtCore.Qt.AlignLeft)
+        infoTex = QtWidgets.QPushButton(str(curveGrp))
+        infoTex.clicked.connect(lambda : pm.select(curveGrp, r=True))
+        layout.addWidget(infoTex, 0, 0)
+
 
 class splineDistributeUI(QtWidgets.QWidget):
     def __init__(self, dock=True):
@@ -37,10 +55,11 @@ class splineDistributeUI(QtWidgets.QWidget):
         super(splineDistributeUI, self).__init__(parent=parent)
 
         self.buildUI()
-        self.parent().layout().addWidget(self)
+        self.parent().layout().addWidget(self)  # add widget finding preiously the parent
         self.distributeObj = None
 
     def buildUI(self):
+        # random Spin box template
         def QDoubleSpinDef():
             qDoubleSpin = QtWidgets.QDoubleSpinBox()
             qDoubleSpin.setRange(0, 500)
@@ -55,6 +74,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutAWidget = QtWidgets.QWidget()
         layoutAWidget.setMaximumWidth(200)
         layoutA = QtWidgets.QGridLayout(layoutAWidget)
+        layoutA.setAlignment(QtCore.Qt.AlignHCenter)
         layoutGeneral.addWidget(layoutAWidget, 0, 0)
         # elements Grid A
         incrementLabel = QtWidgets.QLabel('Increment:')
@@ -71,12 +91,14 @@ class splineDistributeUI(QtWidgets.QWidget):
         scrollWidget = QtWidgets.QWidget()
         scrollWidget.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum) #adaptable
         self.scrollLayout = QtWidgets.QVBoxLayout(scrollWidget)
+        self.scrollLayout.setAlignment(QtCore.Qt.AlignTop)
+        self.scrollLayout.setAlignment(QtCore.Qt.AlignLeft)
         # now set that our widget have an scroll, this is a scroll area
         scrollArea = QtWidgets.QScrollArea()
         scrollArea.setWidgetResizable(True)
         # aply to scrollWidget
         scrollArea.setWidget(scrollWidget)
-        layoutGeneral.addWidget(scrollArea, 1, 0, 2, 1)
+        layoutGeneral.addWidget(scrollArea, 0, 1, 4, 1)
 
         # create grid RandomTrn -> random Tranlate
         # qwidget that containt the grid
@@ -85,7 +107,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutBWidget.setMaximumWidth(300)
         layoutB = QtWidgets.QGridLayout(layoutBWidget)
         layoutB.setAlignment(QtCore.Qt.AlignHCenter)
-        layoutGeneral.addWidget(layoutBWidget, 0, 1)
+        layoutGeneral.addWidget(layoutBWidget, 1, 0)
         # label trnsRandom
         randomTrnLabel = QtWidgets.QLabel('Translate Random:')
         layoutB.addWidget(randomTrnLabel, 0, 0,1,2)
@@ -112,7 +134,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layRRoWid.setMaximumWidth(300)
         layRRo = QtWidgets.QGridLayout(layRRoWid)
         layRRo.setAlignment(QtCore.Qt.AlignHCenter)
-        layoutGeneral.addWidget(layRRoWid, 1, 1)
+        layoutGeneral.addWidget(layRRoWid, 2, 0)
         # label trnsRandom
         labRRo = QtWidgets.QLabel('Rotate Random:')
         layRRo.addWidget(labRRo, 0, 0,1,2)
@@ -139,7 +161,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         layRScWid.setMaximumWidth(300)
         layRSc = QtWidgets.QGridLayout(layRScWid)
         layRSc.setAlignment(QtCore.Qt.AlignHCenter)
-        layoutGeneral.addWidget(layRScWid, 2, 1)
+        layoutGeneral.addWidget(layRScWid, 3, 0)
         # label
         lblWidget = QtWidgets.QWidget()
         lblWidLay = QtWidgets.QGridLayout(lblWidget)
@@ -169,7 +191,7 @@ class splineDistributeUI(QtWidgets.QWidget):
         # create grid Buttons _
         layoutCWidget = QtWidgets.QWidget()
         layoutC = QtWidgets.QGridLayout(layoutCWidget)
-        layoutGeneral.addWidget(layoutCWidget, 3, 0, 1, 2)
+        layoutGeneral.addWidget(layoutCWidget, 4, 0, 1, 2)
 
         generate = QtWidgets.QPushButton('Generate')
         generate.clicked.connect(self.generate)
@@ -186,9 +208,10 @@ class splineDistributeUI(QtWidgets.QWidget):
     def generate(self):
         # if another instance of the class is in scene, bake the old objects
         currectSelection = pm.ls(sl=True)
-        if self.distributeObj != None:
+        if isinstance(self.distributeObj, splineDistribute.splineDistribute):
             logger.info('Previus distributed objects find and baked')
-            self.distributeObj.bakePositions()
+            self.bake()
+            self.distributeObj = splineDistribute.splineDistribute()
         else:
             self.distributeObj = splineDistribute.splineDistribute()
             logger.debug('creating class object splineDistribute()')
@@ -200,28 +223,62 @@ class splineDistributeUI(QtWidgets.QWidget):
                                  float(self.XTrnRnd.value()), float(self.YTrnRnd.value()), float(self.ZTrnRnd.value()),
                                  float(self.XRoRnd.value()), float(self.YRoRnd.value()), float(self.ZRoRnd.value()),
                                  float(self.XScRnd.value()), float(self.YScRnd.value()), float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
+        self.refreshInfo()
+
+    def addInfo(self):
+        if isinstance(self.distributeObj, splineDistribute.splineDistribute):
+            for curveGrp in self.distributeObj.curveGroups:
+                if pm.objExists(curveGrp):
+                    widget = splineDistributeInfo(curveGrp)
+                    self.scrollLayout.addWidget(widget)
+                else:
+                    self.distributeObj.curveGroups.remove(curveGrp)
+
+    def refreshInfo(self):
+
+        while self.scrollLayout.count():
+            widget = self.scrollLayout.takeAt(0).widget()
+            widget.setVisible(False)
+            widget.deleteLater()
+
+        self.addInfo()
 
     def bake(self):
-        logger.debug('Baking spline groups...')
+        logger.info('Baking spline groups...')
         self.distributeObj.bakePositions()
+        del(self.distributeObj)
+        self.distributeObj = None
+        logger.debug('self.distributeObj after del is type: %s' % (type(self.distributeObj)))
+        self.refreshInfo()
 
     def refresh(self):
         # refresh must update the current editable objects in scene.
         # check if a empty list activate a conditional
-        if self.distributeObj.curveGroups:
-            pm.delete(self.distributeObj.curveGroups)
-            self.distributeObj.curveGroups.clear()
-            self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
-                                          float(self.XTrnRnd.value()), float(self.YTrnRnd.value()),
-                                          float(self.ZTrnRnd.value()),
-                                          float(self.XRoRnd.value()), float(self.YRoRnd.value()),
-                                          float(self.ZRoRnd.value()),
-                                          float(self.XScRnd.value()), float(self.YScRnd.value()),
-                                          float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
-            logger.debug('%s were refresh' % self.distributeObj.curveGroups)
+        logger.debug('self.distributeObj is type: %s' %(type(self.distributeObj)))
+        if isinstance(self.distributeObj, splineDistribute.splineDistribute):
+                for obj in self.distributeObj.curveGroups:
+                    try:
+                        # delete curveGrp to refresh later
+                        pm.delete(obj)
+                    except:
+                        # if delete give an error is because obj dosn't exist, so we remove
+                        # curve from .curves and no populate objects in that curve
+                        delCurves = [curve for curve in self.distributeObj.curves if re.match(str(curve)+'.*$', str(obj))]
+                        logger.debug('deleting from .curves and no populate: %s' % delCurves[0])
+                        self.distributeObj.curves.remove(delCurves[0])
+
+                self.distributeObj.curveGroups.clear()
+                self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
+                                              float(self.XTrnRnd.value()), float(self.YTrnRnd.value()),
+                                              float(self.ZTrnRnd.value()),
+                                              float(self.XRoRnd.value()), float(self.YRoRnd.value()),
+                                              float(self.ZRoRnd.value()),
+                                              float(self.XScRnd.value()), float(self.YScRnd.value()),
+                                              float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
+                logger.debug('%s were refreshed' % self.distributeObj.curveGroups)
+                self.refreshInfo()
         else:
             logger.info('Nothing for Refresh')
-            pass
 
 # can't be a static method class
 def getDock(name = 'splineDistributeUIDock'):
