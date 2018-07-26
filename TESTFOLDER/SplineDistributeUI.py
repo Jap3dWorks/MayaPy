@@ -3,11 +3,17 @@ from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import pymel.core as pm
 from TESTFOLDER import splineDistribute
+reload(splineDistribute)
 
 import logging
 logging.basicConfig()
 logger = logging.getLogger('Spline Distribute UI')
 logger.setLevel(logging.DEBUG)
+
+class splineDistributeInfo(QtWidgets.QWidget):
+    """
+    this class should be a way to show info for the splinedistributeUI class
+    """
 
 class splineDistributeUI(QtWidgets.QWidget):
     def __init__(self, dock=True):
@@ -170,9 +176,11 @@ class splineDistributeUI(QtWidgets.QWidget):
         layoutC.addWidget(generate,0 ,0)
 
         refresh = QtWidgets.QPushButton('Refresh')
+        refresh.clicked.connect(self.refresh)
         layoutC.addWidget(refresh, 0, 1)
 
         bake = QtWidgets.QPushButton('Bake')
+        bake.clicked.connect(self.bake)
         layoutC.addWidget(bake,0,2)
 
     def generate(self):
@@ -192,6 +200,28 @@ class splineDistributeUI(QtWidgets.QWidget):
                                  float(self.XTrnRnd.value()), float(self.YTrnRnd.value()), float(self.ZTrnRnd.value()),
                                  float(self.XRoRnd.value()), float(self.YRoRnd.value()), float(self.ZRoRnd.value()),
                                  float(self.XScRnd.value()), float(self.YScRnd.value()), float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
+
+    def bake(self):
+        logger.debug('Baking spline groups...')
+        self.distributeObj.bakePositions()
+
+    def refresh(self):
+        # refresh must update the current editable objects in scene.
+        # check if a empty list activate a conditional
+        if self.distributeObj.curveGroups:
+            pm.delete(self.distributeObj.curveGroups)
+            self.distributeObj.curveGroups.clear()
+            self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
+                                          float(self.XTrnRnd.value()), float(self.YTrnRnd.value()),
+                                          float(self.ZTrnRnd.value()),
+                                          float(self.XRoRnd.value()), float(self.YRoRnd.value()),
+                                          float(self.ZRoRnd.value()),
+                                          float(self.XScRnd.value()), float(self.YScRnd.value()),
+                                          float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
+            logger.debug('%s were refresh' % self.distributeObj.curveGroups)
+        else:
+            logger.info('Nothing for Refresh')
+            pass
 
 # can't be a static method class
 def getDock(name = 'splineDistributeUIDock'):
