@@ -72,9 +72,8 @@ class splineDistributeUI(QtWidgets.QWidget):
 
         # create grid A <- ^
         layoutAWidget = QtWidgets.QWidget()
-        layoutAWidget.setMaximumWidth(200)
+        # layoutAWidget.setMaximumWidth(200)
         layoutA = QtWidgets.QGridLayout(layoutAWidget)
-        layoutA.setAlignment(QtCore.Qt.AlignHCenter)
         layoutGeneral.addWidget(layoutAWidget, 0, 0)
         # elements Grid A
         incrementLabel = QtWidgets.QLabel('Increment:')
@@ -244,6 +243,10 @@ class splineDistributeUI(QtWidgets.QWidget):
         self.addInfo()
 
     def bake(self):
+        if not isinstance(self.distributeObj, splineDistribute.splineDistribute):
+            logger.info('No objects to bake')
+            return
+
         logger.info('Baking spline groups...')
         self.distributeObj.bakePositions()
         del(self.distributeObj)
