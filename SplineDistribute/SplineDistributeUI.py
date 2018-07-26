@@ -1,9 +1,9 @@
-from PySide2 import QtWidgets, QtCore, QtGui
+from PySide2 import QtWidgets, QtCore
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import pymel.core as pm
-from TESTFOLDER import splineDistribute
-reload(splineDistribute)
+from SplineDistribute import splineDistribute
+
 import re
 
 import logging
