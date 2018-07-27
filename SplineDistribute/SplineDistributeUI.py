@@ -9,7 +9,7 @@ import re
 import logging
 logging.basicConfig()
 logger = logging.getLogger('Spline Distribute UI')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class splineDistributeInfo(QtWidgets.QWidget):
     """
@@ -28,9 +28,13 @@ class splineDistributeInfo(QtWidgets.QWidget):
         layout = QtWidgets.QGridLayout(self)
         layout.setAlignment(QtCore.Qt.AlignTop)
         layout.setAlignment(QtCore.Qt.AlignLeft)
+        # button selects connected splinegrp
         infoTex = QtWidgets.QPushButton(str(curveGrp))
-        infoTex.clicked.connect(lambda : pm.select(curveGrp, r=True))
+        infoTex.clicked.connect(lambda : pm.select(curveGrp, tgl=True))
         layout.addWidget(infoTex, 0, 0)
+        # info number mesh created
+        numberMesh = QtWidgets.QLabel(str(len(pm.ls(curveGrp, dag=True, type='mesh'))))
+        layout.addWidget(numberMesh,0,1)
 
 
 class splineDistributeUI(QtWidgets.QWidget):
