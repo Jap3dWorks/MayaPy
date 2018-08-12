@@ -14,14 +14,12 @@ if kApiVersion < 201600:
     envelopeAttr = ompx.cvar.MPxDeformerNode_envelope
 
 else:
-    inputAttr = ompx.cvar.MPxDeformerFilter_input
-    inputGeomAttr = ompx.cvar.MPxDeformerFilter_inputGeom
-    outputGeomAttr = ompx.cvar.MPxDeformerFilter_outputGeom
-    envelopeAttr = ompx.cvar.MPxDeformerFilter_envelope
 
 class PushDeformer(ompx.MPxDeformerNode):
-    id = om.MTypeId(0x01012) # setup the ID
-    name = 'push' # setup the name
+    # setup the ID
+    id = om.MTypeId(0x01012)
+    # setup the name
+    name = 'push'
 
     # now add the attributes we will be using
     # unlike openmaya 2, we need to use an empty MObject here instead of none
@@ -71,10 +69,13 @@ class PushDeformer(ompx.MPxDeformerNode):
         meshFn = om.MFnMesh(mesh)
         # use this to get and store the normals froms the mesh onto the normals array 'normals'
         # remember pay attention to the pluralization of the normals
-        meshFn.getVertexNormal(
-            True, # if True, the normals are angleWeighted which is what we want
-            normals, # we tell were store normals, in this case normals above
-            om.MSpace.kTransform # finally tell the space, in this case object space
+        meshFn.getVertexNormals(
+            # if True, the normals are angleWeighted which is what we want
+            True,
+            # we tell were store normals, in this case normals above
+            normals,
+            # finally tell the space, in this case object space
+            om.MSpace.kTransform
         )
 
         # now we can iterate throught the geometry vertices and do our deformation
@@ -109,7 +110,7 @@ class PushDeformer(ompx.MPxDeformerNode):
         return mesh
 
 def initializePlugin(plugin):
-    plugin = ompx.MFnPlugin(plugin)
+    pluginFn = ompx.MFnPlugin(plugin)
     try:
         pluginFn.registerNode(
             PushDeformer.name,
