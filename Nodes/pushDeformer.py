@@ -14,6 +14,10 @@ if kApiVersion < 201600:
     envelopeAttr = ompx.cvar.MPxDeformerNode_envelope
 
 else:
+    inputAttr = ompx.cvar.MPxGeometryFilter_input
+    inputGeomAttr = ompx.cvar.MPxGeometryFilter_inputGeom
+    outputGeomAttr = ompx.cvar.MPxGeometryFilter_outputGeom
+    envelopeAttr = ompx.cvar.MPxGeometryFilter_envelope
 
 class PushDeformer(ompx.MPxDeformerNode):
     # setup the ID
