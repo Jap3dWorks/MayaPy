@@ -1,10 +1,10 @@
 # https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__py_ref_scripted_2py_draw_foot_printby_render_utilities_8py_example_html
+# https://knowledge.autodesk.com/support/maya/learn-explore/caas/CloudHelp/cloudhelp/2018/ENU/Maya-SDK/files/GUID-66E42F2E-DB0D-44EF-B4DA-7F43D155692A-htm.html
 
 import ctypes
 import sys
 import maya.api.OpenMayaUI as OpenMayaUI
 import maya.api.OpenMaya as OpenMaya
-import maya.api.OpenMayaMPx as OpenMayaMPx
 import maya.api.OpenMayaRender as OpenMayaRender
 import maya.api.OpenMayaAnim as OpenMayaAnim
 import maya.OpenMayaRender as OpenMayaRender1
@@ -66,10 +66,10 @@ heel = [ [  0.00, 0.0,  0.06 ],
 soleCount = 21
 heelCount = 17
 
-#############################################
-# node implementation with standart viewport
-#############################################
-class footPrint(OpenMayaMPx.MPxLocatorNode):
+##############################################
+# node implementation with standard viewport #
+##############################################
+class footPrint(OpenMayaUI.MPxLocatorNode):
     # info of the node
     id = OpenMaya.MTypeId(0x80007)
     drawDbClassification = 'drawdb/geometry/footPrint'
@@ -84,7 +84,7 @@ class footPrint(OpenMayaMPx.MPxLocatorNode):
 
     @staticmethod
     def initialize():
-        # Functionset for creating and working with angle, distance and time attributes
+        # MFnUnitAttribute Function set for creating and working with angle, distance and time attributes
         # in this case we want to work with distance.
         unitFn = OpenMaya.MFnUnitAttribute()
 
@@ -102,8 +102,10 @@ class footPrint(OpenMayaMPx.MPxLocatorNode):
 
     def draw(self, view, path, style, status):
         # get the size
+        # thisMObject Returns the MObject associated with this user defined node.
+        # This makes it possible to use MFnDependencyNode or to construct plugs to this node's attributes.
         thisNode = self.thisMObject()
-        plug = om.MPlug(thisNode, footPrint.size)
+        plug = OpenMaya.MPlug(thisNode, footPrint.size)
         sizeVal = plug.asMDistance()
         multiplier = sizeVal.asCentimeters()
 
@@ -118,7 +120,7 @@ class footPrint(OpenMayaMPx.MPxLocatorNode):
         glRenderer = OpenMayaRender1.MHardwareRenderer.theRenderer()
         glFT = glRenderer.glFunctionTable()
 
-        if (style==OpenMayaUI.M3dView.kFlatShaded) or (style==OpenMayaUI.M3dView.kGouraudShaded):
+        if (style == OpenMayaUI.M3dView.kFlatShaded) or (style == OpenMayaUI.M3dView.kGouraudShaded):
             # pushed current state. glPushAttrib take a mask
             # that indicates which group of states variables save on the attribute stack.
             # GL_CURRENT_BIT current RGBA color
@@ -158,13 +160,12 @@ class footPrint(OpenMayaMPx.MPxLocatorNode):
             # define points.
             for i in range(soleCount-1):
                 glFT.glVertex3f(sole[i][0]*multiplier, sole[i][1]*multiplier, sole[i][2]*multiplier)
-
             # end communication with graphic card
             glFT.glEnd()
 
+            glFT.glBegin(OpenMayaRender1.MGL_TRIANGLE_FAN)
             for i in range(heelCount-1):
                 glFT.glVertex3f(heel[i][0]*multiplier, heel[i][1]*multiplier, heel[i][2]*multiplier)
-
             glFT.glEnd()
 
             # glPopAttrib() restores the values of the state variables saved with the last glPushAttrib command.
@@ -193,7 +194,8 @@ class footPrint(OpenMayaMPx.MPxLocatorNode):
 
     def boundingBox(self):
         # Get the size
-        # read about thisMObject func
+        # thisObject Returns the MObject associated with this user defined node.
+        # This makes it possible to use MFnDependencyNode or to construct plugs to this node's attributes.
         thisNode = self.thisMObject()
         plug = OpenMaya.MPlug(thisNode, footPrint.size)
         sizeVal = plug.asMDistance()
@@ -202,22 +204,25 @@ class footPrint(OpenMayaMPx.MPxLocatorNode):
         corner1 = OpenMaya.MPoint(-0.17, 0.0, -0.7)
         corner2 = OpenMaya.MPoint(0.17, 0.0, 0.3)
 
+        # multiply corner values per footPrint.size attribute
         corner1 *= multiplier
         corner2 *= multiplier
 
         return OpenMaya.MBoundingBox(corner1, corner2)
 
-##################################
-# Maya viewport2 implementation
-##################################
-
+#################################
+# Maya viewport2 implementation #
+#################################
+# MUserData Virtual base class for user data caching.
 class footPrintData(OpenMaya.MUserData):
     def __init__(self):
-        OpenMaya.MUserData.__init__(self, False) # don't delete after draw
+        OpenMaya.MUserData.__init__(self, False)  # don't delete after draw
 
         self.fMultiplier = 0.0
         self.fColor = [0.0, 0.0, 0.0]
-        self.fCustomBoxDraw = False
+        self.fCustomBoxDraw = False  # REVIEW: default value is False
+        # MDAGDrawOverrideInfo() a data structure to store the per path draw override information
+        # normal, reference, template, ...
         self.fDrawOV = OpenMaya.MDAGDrawOverrideInfo()
 
 # helper class declaration for the object drawing
@@ -280,6 +285,21 @@ class footPrintDrawAgent:
             OpenMayaRender.MRenderUtilities.drawSimpleMesh(context, self.mHeelVertexBuffer,
                                                            self.mHeelWireIndexBuffer, OpenMayaRender.MGeometry.kLines,
                                                            0, 2 * (heelCount-1))
+
+    def drawBoundingBox(self, context):
+        if self.mBoundingBoxVertexBuffer is not None and self.mBoundingBoxIndexBuffer is not None:
+            OpenMayaRender.MRenderUtilities.drawSimpleMesh(context, self.mBoundingBoxVertexBuffer, self.mBoundingBoxIndexBuffer, OpenMayaRender.MGeometry.kLines, 0, 24)
+
+    def drawWireFrame(self, context):
+        global soleCount, heelCount
+
+        # draw the sole
+        if self.mSoleVertexBuffer is not None and self.mSoleWireIndexBuffer is not None:
+            OpenMayaRender.MRenderUtilities.drawSimpleMesh(context, self.mSoleVertexBuffer, self.mSoleWireIndexBuffer, OpenMayaRender.MGeometry.kLines, 0, 2*(soleCount-1))
+
+        # draw the heel
+        if self.mHeelVertexBuffer is not None and self.mHeelWireIndexBuffer is not None:
+            OpenMayaRender.MRenderUtilities.drawSimpleMesh(context, self.mHeelVertexBuffer, self.mHeelWireIndexBuffer, OpenMayaRender.MGeometry.kLines, 0, 2*(heelCount-1))
 
     def endDraw(self, context):
         if self.mShader is not None:
@@ -345,9 +365,9 @@ class footPrintDrawAgent:
                        2,6,
                        3,7]
 
-            # TODO buffers explanation // explain better rawData // raw data is an indexBuffer
+            # buffers EXPLANATION // explain better rawData // raw data is an indexBuffer
             # here we get a space in memory and the fill it with C Data types
-            # https://vulkan-tutorial.com/Vertex_buffers/Index_buffer  <-- indexBuffer explanation
+            # https://vulkan-tutorial.com/Vertex_buffers/Index_buffer  <-- indexBuffer EXPLANATION
 
             # the indices need to be uploaded to ha vkBuffer for the GPU be able to them
             # MIndexBuffer represents an index buffer with a specific data. usable with MGeometry
@@ -361,7 +381,7 @@ class footPrintDrawAgent:
             # ctypes provides C compatible data types, and allows calling functions in DLLs or shared libraries.
             # It can be used to wrap these libraries in pure Python.
 
-            # http://pyplusplus.readthedocs.io/en/latest/tutorials/functions/transformation/from_address.html  <-- from_address explanation
+            # http://pyplusplus.readthedocs.io/en/latest/tutorials/functions/transformation/from_address.html  <-- from_address EXPLANATION
             # unsigned_int * count -> [c_uint][c_uint]... count times
             # from_address you can use ctypes package to create the data and than pass it to
             # the Boost.Python exposed function, in this case dataAddress
@@ -593,7 +613,7 @@ class footPrintDrawAgentGL(footPrintDrawAgent):
 # DX draw Agent Declaration
 class footPrintDrawAgentDX(footPrintDrawAgent):
     def __init__(self):
-        super(footPrintDrawAgentDX, self).__init__()
+        footPrintDrawAgent.__init__(self)
 
     def getShaderCode(self):
         shaderCode = """
@@ -650,7 +670,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
 
     @staticmethod
     def draw(context, data):
-        # get user draw data
+        # get user draw data, data is footPrintData class
         # context is MFrameContext Class, contains some global information for the current render frame.
         # This includes information such as render targets, viewport size and camera information.
         footData = data
@@ -659,10 +679,10 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
         if not isinstance(footData, footPrintData):
             return
 
-        # get dag object draw override
+        # get dag object draw override info
         objectOverrideInfo = footData.fDrawOV
 
-        # sample code to determinte the rendering destination
+        # sample code to determinate the rendering destination
         debugDestination = False
         if debugDestination:
             destination = context.renderingDestination()
@@ -675,7 +695,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
 
             print 'footprint node render destination is' + destinationType + '. Destination name=' + str(destination[1])
 
-        # just return and draw nothing, if it is overriden ivisible
+        # just return and draw nothing, if it is override invisible
         if objectOverrideInfo.overrideEnabled and not objectOverrideInfo.enableVisible:
             return
 
@@ -688,7 +708,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
         ## doesn't need to be drawn here.
         ##
 
-        if drawAsBoundingbox and not footData.fCustomBoxDraw
+        if drawAsBoundingbox and not footData.fCustomBoxDraw:
             return
 
         animPlay = OpenMayaAnim.MAnimControl.isPlaying()
@@ -751,7 +771,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
                 global blendState
                 if blendState is None:
                     desc = OpenMayaRender.MBlendStateDesc()
-                    desc.targetBlends[0].blendState = True
+                    desc.targetBlends[0].blendEnable = True
                     desc.targetBlends[0].destinationBlend = OpenMayaRender.MBlendStatekInvSourceAlpha
                     desc.targetBlends[0].alphaDestinationBlend = OpenMayaRender.MBlendStatekInvSourceAlpha
                     blendState = stateMgr.acquireBlendState(desc)
@@ -783,7 +803,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
         # prepare draw Agent, default using OpenGL
         global drawAgent
         if drawAgent is None:
-            if OpenMayaRender.MRenderer.drawAPIIsOpenGL()
+            if OpenMayaRender.MRenderer.drawAPIIsOpenGL():
                 drawAgent = footPrintDrawAgentGL()
             else:
                 drawAgent = footPrintDrawAgentDX()
@@ -826,12 +846,12 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
                 stateMgr.setRasterizerState(oldRasterState)
 
     def __init__(self, obj):
-        super(footPrintDrawOverride, self).__init__()
+        OpenMayaRender.MPxDrawOverride.__init__(self, obj, footPrintDrawOverride.draw)
 
         ## We want to perform custom bounding box drawing
         ## so return True so that the internal rendering code
         ## will not draw it for us.
-        self.mCustomBoxDraw = True
+        self.mCustomBoxDraw = False  # REVIEW original value was True
         self.mCurrentBoundingBox = OpenMaya.MBoundingBox()
 
     def supportedDrawAPIs(self):
@@ -933,14 +953,14 @@ def uninitializePlugin(obj):
 """
 to load
 
-from Nodes import LocatorNode
-# reload(LocatorNode)
+from Nodes import footPrint 
+# reload(footPrint)
 from maya import cmds
 try:
     # Force is important 
     cmds.unloadPlugin('footPrint', force=True)
 finally:
-    cmds.loadPlugin(LocatorNode.__file__)
+    cmds.loadPlugin(footPrint.__file__)
     
-cmds.createNode('LeftFoot')
+cmds.createNode('footPrint')
 """
