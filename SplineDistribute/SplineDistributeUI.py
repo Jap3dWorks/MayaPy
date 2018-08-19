@@ -309,3 +309,9 @@ def getMayaWindow():
     win = omui.MQtUtil_mainWindow()
     ptr = wrapInstance(long(win), QtWidgets.QMainWindow)
     return ptr
+
+"""
+from SplineDistribute import SplineDistributeUI
+reload(SplineDistributeUI)
+splineDistributeWindow = SplineDistributeUI.splineDistributeUI()
+"""
