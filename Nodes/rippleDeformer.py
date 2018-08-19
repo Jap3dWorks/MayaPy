@@ -68,7 +68,7 @@ class Ripple(OpenMayaMPx.MPxDeformerNode):
 
         mFloatVectorArray_normal = OpenMaya.MFloatVectorArray()
         mFnMesh = OpenMaya.MFnMesh(inMesh)
-        mFnMesh.getVertexNormal(False, mFloatVectorArray_normal, OpenMaya.MSpace.kObject)
+        mFnMesh.getVertexNormals(False, mFloatVectorArray_normal, OpenMaya.MSpace.kObject)
 
         mPointArray_meshVert = OpenMaya.MPointArray()
         while not geoIterator.isDone():
@@ -114,7 +114,7 @@ def nodeInitializer():
 def initializePlugin(mObject):
     mplugin = OpenMayaMPx.MFnPlugin(mObject, 'Chayan Vinayak', '1.0')
     try:
-        mplugin.registerNode(nodeName, nodeId, deformerCreator, nodeInitializer, OpenMayaMPx.MPxDeformerNode)
+        mplugin.registerNode(nodeName, nodeId, deformerCreator, nodeInitializer, OpenMayaMPx.MPxNode.kDeformerNode)
     except:
         sys.stderr.write('Failed to register node: %s' % nodeName)
         raise
@@ -134,10 +134,10 @@ def uninitializePlugin(mObject):
     import maya.cmds as mc
     try:
         # Force is important 
-        mc.unloadPlugin('Ripple', force=True)
+        mc.unloadPlugin('RippleDeformer', force=True)
     finally:
-        mc.loadPlugin(Ripple.__file__)
-
-    # mc.polySphere()
+        mc.loadPlugin(rippleDeformer.__file__)
+    
+    mc.polySphere()
     mc.deformer(type='RippleDeformer')
 """
