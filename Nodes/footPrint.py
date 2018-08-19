@@ -24,7 +24,7 @@ def matrixAsArray(matrix):
 
 # foot data, this is interesting
 # because we can for example use json files to store different shapes.
-# TODO experiments saving point in json files and then change the locator shape
+# TODO try saving point in json files and then change the locator shape
 sole = [ [  0.00, 0.0, -0.70 ],
         [  0.04, 0.0, -0.69 ],
         [  0.09, 0.0, -0.65 ],
@@ -321,6 +321,8 @@ class footPrintDrawAgent:
         global soleCount, sole
         global heelCount, heel
 
+        #EXPLANATION: VERTEX BUFFERS and INDEX BUFFERS Maya API:
+        # https://knowledge.autodesk.com/support/maya/learn-explore/caas/CloudHelp/cloudhelp/2018/ENU/Maya-SDK/files/GUID-148A1EF1-B350-416F-A800-C47DA90D1369-htm.html
         if self.mBoundingBoxVertexBuffer is None:
             count = 8
             rawData = [[ -0.5, -0.5, -0.5 ],
