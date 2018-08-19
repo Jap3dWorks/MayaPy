@@ -1,4 +1,4 @@
-# open maya 2.0 doesn't support create nodes
+# open maya 2.0 doesn't support create deform nodes
 
 from maya import OpenMaya as om
 import maya.OpenMayaMPx as ompx
