@@ -142,7 +142,7 @@ def uninitializePlugin(plugin):
     import maya.cmds as mc
     try:
         # Force is important 
-        mc.unloadPlugin('pushDeformer', force=True)
+        mc.unloadPlugin('push', force=True)
     finally:
         mc.loadPlugin(pushDeformer.__file__)
         
