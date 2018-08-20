@@ -420,12 +420,12 @@ class footPrintDrawAgent:
             self.mHeelVertexBuffer = OpenMayaRender.MVertexBuffer(desc)
 
             dataAddress = self.mHeelVertexBuffer.acquire(heelCount, True)
-            data = ((ctypes.c_float*3)*heelCount).from_address(dataAddress)
+            data = ((ctypes.c_float * 3)*heelCount).from_address(dataAddress)
 
             for i in range(heelCount):
-                data[i][0] = sole[i][0]
-                data[i][1] = sole[i][1]
-                data[i][2] = sole[i][2]
+                data[i][0] = heel[i][0]
+                data[i][1] = heel[i][1]
+                data[i][2] = heel[i][2]
 
             self.mHeelVertexBuffer.commit(dataAddress)
             dataAddress = None
@@ -457,7 +457,7 @@ class footPrintDrawAgent:
             self.mSoleWireIndexBuffer = OpenMayaRender.MIndexBuffer(OpenMayaRender.MGeometry.kUnsignedInt32)
 
             dataAddress = self.mSoleWireIndexBuffer.acquire(count, True)
-            data = (ctypes.c_uint*count).from_address(dataAddress)
+            data = (ctypes.c_uint * count).from_address(dataAddress)
 
             for i in range(count):
                 data[i] =  rawData[i]
@@ -562,10 +562,11 @@ class footPrintDrawAgent:
 
         return True
 
-# gl Draw Declaration
+# gl Draw Declaration inheritance footPrintDrawAgent declared above,
+# who start the buffers, here define the shader
 class footPrintDrawAgentGL(footPrintDrawAgent):
     def __init__(self):
-        super(footPrintDrawAgentGL, self).__init__()
+        footPrintDrawAgent.__init__(self)
 
     def getShaderCode(self):
         shaderCode = """
@@ -853,15 +854,17 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
         ## We want to perform custom bounding box drawing
         ## so return True so that the internal rendering code
         ## will not draw it for us.
-        self.mCustomBoxDraw = False  # REVIEW original value was True
+        self.mCustomBoxDraw = True
         self.mCurrentBoundingBox = OpenMaya.MBoundingBox()
 
     def supportedDrawAPIs(self):
         # this plugin supports both GL and DX
         return OpenMayaRender.MRenderer.kOpenGL | OpenMayaRender.MRenderer.kDirectX11
 
+
     def isBounded(self, objPath, cameraPath):
         return True
+
 
     def boundingBox(self, objPath, cameraPath):
         corner1 = OpenMaya.MPoint(-0.17, 0.0, -0.7)
@@ -879,6 +882,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
 
     def disableInternalBoundingBoxDraw(self):
         return self.mCustomBoxDraw
+
 
     def prepareForDraw(self, objPath, cameraPath, frameContext, oldData):
         # retrieve data cache (create if does not exist)
@@ -922,7 +926,7 @@ class footPrintDrawOverride(OpenMayaRender.MPxDrawOverride):
             sizeVal = plug.asMDistance()
             return sizeVal.asCentimeters()
 
-        return  1.0
+        return 1.0
 
 def initializePlugin(obj):
     plugin = OpenMaya.MFnPlugin(obj, 'Autodesk', '3.0', 'Any')

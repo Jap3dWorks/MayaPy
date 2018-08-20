@@ -5,6 +5,11 @@ import maya.OpenMayaMPx as ompx
 import maya.cmds as cmds
 
 # the api changed somewhat so we need to get the right attributes
+# EXPLANATION cvar.MPXDeformerNode_Input or ouput
+# By inheriting from MPxDeformerNode, your class will have access to the input and output mesh attributes,
+# available via OpenMayaMPx.cvar.MPxGeometryFilter_inputGeom and
+# OpenMayaMPx.cvar.MPxGeometryFilter_outputGeom respectively.
+# https://knowledge.autodesk.com/search-result/caas/CloudHelp/cloudhelp/2016/ENU/Maya-SDK/files/GUID-10CE99A6-2C32-49E1-85ED-2E2F6782CF23-htm.html
 
 kApiVersion = cmds.about(apiVersion=True)
 if kApiVersion < 201600:
@@ -108,8 +113,10 @@ class PushDeformer(ompx.MPxDeformerNode):
     def getInputMesh(self, data, geomIdx):
         # we need to check the input of the node
         inputHandle = data.outputArrayValue(inputAttr)
+        # inputHandle is MArrayDataHandle
         inputHandle.jumpToElement(geomIdx)
         # Once we have the input handle, we get its values, then find the children mesh and get it as a mesh MObject
+        # inputHandle.outputValue(). give a MDataHandle.
         mesh = inputHandle.outputValue().child(inputGeomAttr).asMesh()
         return mesh
 
