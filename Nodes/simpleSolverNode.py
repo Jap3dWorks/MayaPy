@@ -35,7 +35,7 @@ class simpleSolverNode(OpenMayaMPx.MPxIkSolverNode):
                                                          # for possible duplicated objects
 
         # get the position of the end_effector
-        end_effector = OpenMaya.MDagpath()
+        end_effector = OpenMaya.MDagPath()
         fnHandle.getEffector(end_effector)
         tran = OpenMaya.MFnTransform(end_effector)
         effector_position = tran.rotatePivot(OpenMaya.MSpace.kWorld)
@@ -132,3 +132,17 @@ def uninitializePlugin(mobject):
     except:
         sys.stderr.write("Failed to unregister node: %s" % kSolverNodeName)
         raise
+
+"""
+from Nodes import simpleSolverNode
+reload(simpleSolverNode)
+from maya import cmds
+try:
+    # Force is important 
+    cmds.unloadPlugin('spSimpleSolverNode', force=True)
+finally:
+    cmds.loadPlugin(simpleSolverNode.__file__)
+
+cmds.createNode("spSimpleSolverNode", name="spSimpleSolverNode1")
+cmds.ikHandle(sol="spSimpleSolverNode1", sj="joint1", ee="joint2")
+"""
