@@ -33,8 +33,17 @@ class CBSelChange(OpenMaya.MPxNode):
     def callbackFunc(self, *args):
         # get active selection
         mSel = OpenMaya.MSelectionList()
-        mSel.merge(OpenMaya.MGlobal.getActiveSelectionList())
-        print ('{0} print a callback, item selected: {1}'.format(self.nodeName, mSel))
+        try:
+            mSel.merge(OpenMaya.MGlobal.getActiveSelectionList())
+            print ('{0} print a callback, item selected: {1}'.format(self.nodeName, mSel))
+        except:
+            print ('nothing selected')
+            return
+
+        for i in mSel:
+            mfnTransform = OpenMaya.MFnTransform()
+
+
 
     def remove(self, *args):
         # Try to get this node, if it return error, the node do not exist
