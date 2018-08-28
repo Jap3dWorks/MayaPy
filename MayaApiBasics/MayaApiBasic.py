@@ -19,8 +19,8 @@ def APITEST(arg=10):
         # get mobject of shape
         shapeObject = shape.node()
         # check type of mObject
-        print '\n===========================================================\n'
-        print '%s is MObject type: %s' % (shape, shape.node().apiTypeStr)
+        print ('\n===========================================================\n')
+        print ('%s is MObject type: %s' % (shape, shape.node().apiTypeStr))
 
         # get connections, first we need a maya function class
         # which let us operate on maya api objects.
@@ -30,14 +30,14 @@ def APITEST(arg=10):
         mPlugArray = mFnMesh.getConnections()  # mplugArray Class
         
         for i in range(len(mPlugArray)):
-            print '%s plugs are: %s' % (shape, mPlugArray[i])
+            print ('%s plugs are: %s' % (shape, mPlugArray[i]))
         
         # we need the second plug of the array,
         # and use another MPlugArray to store on which plugs are connected
         mPlugArray_connections = mPlugArray[1].connectedTo(True, False)
         # print all the found plugs
         for i in range(len(mPlugArray_connections)):
-            print '%s plug %s is connected to: %s' % (shape, mPlugArray[1], mPlugArray_connections[i])
+            print ('%s plug %s is connected to: %s' % (shape, mPlugArray[1], mPlugArray_connections[i]))
             
         # once we have our mplugArray of polyCube. we can find the polyCube node
         cubeNode = mPlugArray_connections[0].node()  # node as an mObject
@@ -52,8 +52,9 @@ def APITEST(arg=10):
             # .attribute => MObject (attribute)
             # .attribute give us the index attribute as a MObject
             cubeNodeAttr = cubeNodeFn.attribute(i)
-            cubeNodePlug = cubeNodeFn.findPlug(cubeNodeFn.attribute(i), True)
-            print cubeNodePlug.info  # names of the attributes
+            print 'plug is type: %s' % cubeNodeAttr.apiTypeStr
+            cubeNodePlug = cubeNodeFn.findPlug(cubeNodeAttr , True)
+            print (cubeNodePlug.info)  # names of the attributes
             if cubeNodePlug.info == '%s.subdivisionsHeight' %cubeNodeFn.name():
                 # to operate over an attribute, we need a plug. It give us the methods for that pourpose 
                 cubeNodePlug.setInt(arg)
@@ -64,4 +65,4 @@ def APITEST(arg=10):
         mSelIt.next()
 
 if __name__=='__main__':
-    APITEST(9)
+    APITEST(2)
