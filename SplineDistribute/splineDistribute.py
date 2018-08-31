@@ -3,7 +3,7 @@ from __future__ import division
 import logging
 logging.basicConfig()
 logger = logging.getLogger('Spline Distribute')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 import random
 

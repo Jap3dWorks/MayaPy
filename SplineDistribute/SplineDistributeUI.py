@@ -219,7 +219,7 @@ class splineDistributeUI(QtWidgets.QWidget):
             self.distributeObj = splineDistribute.splineDistribute()
             logger.debug('creating class object splineDistribute()')
         # create new isntance os the class
-        logger.info('Distributing objects')
+        logger.debug('Distributing objects')
         pm.select(currectSelection, r=True)
         self.distributeObj.saveObjects()
         self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
@@ -238,7 +238,6 @@ class splineDistributeUI(QtWidgets.QWidget):
                     self.distributeObj.curveGroups.remove(curveGrp)
 
     def refreshInfo(self):
-
         while self.scrollLayout.count():
             widget = self.scrollLayout.takeAt(0).widget()
             widget.setVisible(False)
@@ -261,29 +260,30 @@ class splineDistributeUI(QtWidgets.QWidget):
     def refresh(self):
         # refresh must update the current editable objects in scene.
         # check if a empty list activate a conditional
+        logger.info('Refresh ...')
         logger.debug('self.distributeObj is type: %s' %(type(self.distributeObj)))
         if isinstance(self.distributeObj, splineDistribute.splineDistribute):
-                for obj in self.distributeObj.curveGroups:
-                    try:
-                        # delete curveGrp to refresh later
-                        pm.delete(obj)
-                    except:
-                        # if delete give an error is because obj dosn't exist, so we remove
-                        # curve from .curves and no populate objects in that curve
-                        delCurves = [curve for curve in self.distributeObj.curves if re.match(str(curve)+'.*$', str(obj))]
-                        logger.debug('deleting from .curves and no populate: %s' % delCurves[0])
-                        self.distributeObj.curves.remove(delCurves[0])
+            for obj in self.distributeObj.curveGroups:
+                try:
+                    # delete curveGrp to refresh later
+                    pm.delete(obj)
+                except:
+                    # if delete give an error is because obj dosn't exist, so we remove
+                    # curve from .curves and no populate objects in that curve
+                    delCurves = [curve for curve in self.distributeObj.curves if re.match(str(curve)+'.*$', str(obj))]
+                    logger.debug('deleting from .curves and no populate: %s' % delCurves[0])
+                    self.distributeObj.curves.remove(delCurves[0])
 
-                self.distributeObj.curveGroups.clear()
-                self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
-                                              float(self.XTrnRnd.value()), float(self.YTrnRnd.value()),
-                                              float(self.ZTrnRnd.value()),
-                                              float(self.XRoRnd.value()), float(self.YRoRnd.value()),
-                                              float(self.ZRoRnd.value()),
-                                              float(self.XScRnd.value()), float(self.YScRnd.value()),
-                                              float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
-                logger.debug('%s were refreshed' % self.distributeObj.curveGroups)
-                self.refreshInfo()
+            self.distributeObj.curveGroups.clear()
+            self.distributeObj.distribute(float(self.increment.value()), bool(self.BboxCBx.checkState()),
+                                          float(self.XTrnRnd.value()), float(self.YTrnRnd.value()),
+                                          float(self.ZTrnRnd.value()),
+                                          float(self.XRoRnd.value()), float(self.YRoRnd.value()),
+                                          float(self.ZRoRnd.value()),
+                                          float(self.XScRnd.value()), float(self.YScRnd.value()),
+                                          float(self.ZScRnd.value()), bool(self.checkBxScXZ.checkState()))
+            logger.debug('%s were refreshed' % self.distributeObj.curveGroups)
+            self.refreshInfo()
         else:
             logger.info('Nothing for Refresh')
 
