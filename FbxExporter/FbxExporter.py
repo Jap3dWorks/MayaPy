@@ -24,8 +24,8 @@ logger.setLevel(logging.DEBUG)
 class FbxExporter(list):
     attrBoolName = 'exp'
     attrPathName = 'FbxExpPath'
-    # type = OpenMaya.MFn.kNumericAttribute
     typeAttr = OpenMaya.MFnNumericData.kBoolean
+    typeAttr_Find = OpenMaya.MFn.kNumericAttribute
     defaultPath = os.getenv('MAYA_APP_DIR')
 
     def __init__(self):
@@ -41,7 +41,7 @@ class FbxExporter(list):
         self[:] = []
 
         # search items
-        self = self.findAttr(self.attrBoolName, self.typeAttr)
+        self = self.findAttr(self.attrBoolName, self.typeAttr_Find)
         logger.debug('Class list items:%s items found: %s' % (len(self), self))
 
     def findAttr(self, attr, type, *args):
@@ -75,6 +75,7 @@ class FbxExporter(list):
                 transform_attr = transform_mfn.attribute(i)  # MObject
                 transform_plug = transform_mfn.findPlug(transform_attr, True).info
                 # fixme recollect float attributes, int, and boolean. better only boolean
+                # fixme use MFnTransform.hasAttribute() to avoid this loop
                 if transform_plug == '%s.%s' % (transform, attr) and transform_attr.apiType() == type:
                     transformReturn.append(pm.PyNode(transform))
                     break
@@ -102,10 +103,8 @@ class FbxExporter(list):
             fAttr.writable = True
 
             # string path
-            mfnStringData = OpenMaya.MFnStringData()
-            # mfnStringData.set(path)
             fAttr = OpenMaya.MFnTypedAttribute()
-            pathAttr = fAttr.create(self.attrPathName, 'pt', OpenMaya.MFnData.kString, mfnStringData.object())
+            pathAttr = fAttr.create(self.attrPathName, 'pt', OpenMaya.MFnData.kString)
             fAttr.keyable = True
             fAttr.storable = True
             fAttr.readable = True
@@ -121,19 +120,15 @@ class FbxExporter(list):
             fAttr.readable = True
             fAttr.writable = True
 
-            # iterate attributes of the node
-            for i in range(transform_fn.attributeCount()):
-                attr_mOb = transform_fn.attribute(i)  # mobject with the attribute
-                attr_plug = transform_fn.findPlug(attr_mOb, True).info
-                if '%s.%s' % (transform, self.attrBoolName) == attr_plug and attr_mOb.apiType() == self.typeAttr:
-                    logger.info('%s already has attribute: %s' % (transform, attr_plug))
-                    break
+            # check if we have yet the attribute
+            if transform_fn.hasAttribute(self.attrBoolName):
+                logger.info('%s already has attribute: %s' % (transform, self.attrBoolName))
+
             else:
-                # if for no break, is because the loop does not find the desired attribute.
-                # so we can add it
+                # add attribute if it does not exist in the node
                 transform_fn.addAttribute(compoundAttr)
                 pathAttr_plug = transform_fn.findPlug(self.attrPathName, True)
-                logger.debug('%s has atrribute %s: %s' % (transform, pathAttr_plug, transform_fn.hasAttribute(self.attrPathName)))
+                logger.debug('%s has added attribute %s: %s' % (transform, pathAttr_plug, transform_fn.hasAttribute(self.attrPathName)))
                 try:
                     pathAttr_plug.setString(path)
                 except:
@@ -141,6 +136,9 @@ class FbxExporter(list):
                     raise
 
             mSelList_It.next()
+
+    def removeAttr(self):
+        pass
 
     def export(self):
         pass
