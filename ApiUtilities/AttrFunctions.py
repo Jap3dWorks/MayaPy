@@ -29,10 +29,12 @@ def findAttr(attr, *args):
         transform_mfn = OpenMaya.MFnTransform(transform)
 
         for i in range(transform_mfn.attributeCount()):
-            transform_attrName = transform_mfn.findPlug(transform_mfn.attribute(i), True).info
-            if transform_attrName == '%s.%s' % (transform, attr):
-                # print 'attr Found: %s -> %s ' % (transform_attrName, transform)
+            transform_attr = transform_mfn.attribute(i)  # MObject
+            transform_plug = transform_mfn.findPlug(transform_attr, True).info  # conect a plug
+            # fixme recollect float attributes, int, and boolean. better only boolean
+            if transform_plug == '%s.%s' % (transform, attr) and transform_attr.apiType() == type:
                 transformReturn.append(pm.PyNode(transform))
+                break
         
         mselList_It.next()
     
@@ -56,9 +58,50 @@ def listAttrTypes():
         mSelIt.next()
     
     
+def addAttribute():
+    m_selectionList = OpenMaya.MGlobal.getActiveSelectionList()
+    
+    # mobject of first item of Mselection
+    m_DepNode = m_selectionList.getDependNode(0)
+    # set FnDependencyNode
+    m_node_fn = OpenMaya.MFnDependencyNode(m_DepNode)
+    
+    #BoolAttribute
+    fAttr = OpenMaya.MFnNumericAttribute()
+    aSampleBool = fAttr.create('SampleBool', 'sb', OpenMaya.MFnNumericData.kBoolean, True) # get an mObject atttr
+    
+    fAttr.keyable = True
+    fAttr.storable = True
+    fAttr.readable = True
+    fAttr.writable = True
+    
+    #StringAttribute
+    fAttr = OpenMaya.MFnTypedAttribute()
+    aSampleText = fAttr.create('sampleTXT', 'st', OpenMaya.MFnData.kString)
+    
 
+    fAttr.keyable = True
+    fAttr.storable = True
+    fAttr.readable = True
+    fAttr.writable = True
+    
+    #multi Compound Attribute
+    fAttr =  OpenMaya.MFnCompoundAttribute()
+    aCompound = fAttr.create('sampleCompound', 'sc')
+    fAttr.addChild(aSampleBool)
+    fAttr.addChild(aSampleText)
+    
+    # fAttr.array = True  # this create a way to duplicate the attr multiple times
+    fAttr.keyable = True
+    fAttr.storable = True
+    fAttr.readable = True
+    fAttr.writable = True
+    
+    m_node_fn.addAttribute(aCompound)
+    
 
 
 if __name__=='__main__':
-    findAttr('exp', 'pCube56')
+    # findAttr('exp', 'pCube56')
     # listAttrTypes()
+    addAttribute()
