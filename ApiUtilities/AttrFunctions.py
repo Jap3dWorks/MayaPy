@@ -102,6 +102,6 @@ def addAttribute():
 
 
 if __name__=='__main__':
-    # findAttr('exp', 'pCube56')
-    # listAttrTypes()
-    addAttribute()
+    # findAttr('Exp')
+    listAttrTypes()
+    # addAttribute()
