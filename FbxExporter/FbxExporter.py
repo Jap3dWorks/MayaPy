@@ -1,7 +1,6 @@
-# fbx Exporter.
+# fbx Exporter V0.5.
 """
 http://evgeniyzaitsev.com/2010/07/28/60/
-
  TODO the idea is add two attributes:
     exp -> boolean // indicate if is exportable
     path -> string // path where objects will be export
@@ -13,7 +12,6 @@ http://evgeniyzaitsev.com/2010/07/28/60/
 """
 import pymel.core as pm
 import maya.api.OpenMaya as OpenMaya
-import sys
 import os
 
 import logging
@@ -25,19 +23,17 @@ class FbxExporter(list):
     attrBoolName = 'exp'
     attrPathName = 'FbxExpPath'
     attrCompoundName = 'FbxExporter'
-
-    # typeAttr = OpenMaya.MFnNumericData.kBoolean
-    # this is unnecessary: typeAttr_Find = OpenMaya.MFn.kNumericAttribute
     defaultPath = os.getenv('MAYA_APP_DIR')
 
     def __init__(self):
         super(FbxExporter, self).__init__()
+
+        # Construct list
         self.__constructList()
 
     def __constructList(self):
         """
         This method fill the self.list
-        Returns:
 
         """
         # clear previous list and all references
@@ -53,7 +49,7 @@ class FbxExporter(list):
             attr: Attribute desired
             *args: objects we want to check, if no *args check entire scene
 
-        Returns: Pymel objects List that contain the attribute
+        Returns: Pymel objects List that have the attribute
         """
 
         mselList = OpenMaya.MSelectionList()
@@ -63,7 +59,7 @@ class FbxExporter(list):
                 mselList.add(i)
         # no args check entire scene
         else:
-            mselList.add('*')
+            mselList.add('*')  # add all scene
 
         # msellist iterator
         mselList_It = OpenMaya.MItSelectionList(mselList, OpenMaya.MFn.kTransform)
@@ -76,14 +72,6 @@ class FbxExporter(list):
 
             # use transform_mfn.hasAttribute() to avoid this loop
             # fixme: actually, this method doesn not look for the attribute type
-            """
-            for i in range(transform_mfn.attributeCount()):
-                transform_attr = transform_mfn.attribute(i)  # MObject
-                transform_plug = transform_mfn.findPlug(transform_attr, True).info
-                if transform_plug == '%s.%s' % (transform, attr) and transform_attr.apiType() == type:
-                    transformReturn.append(pm.PyNode(transform))
-                    break
-            """
 
             if transform_mfn.hasAttribute(attr):
                 transformReturn.append(pm.PyNode(transform))
@@ -93,6 +81,12 @@ class FbxExporter(list):
         return transformReturn
 
     def addAttributes(self, path=defaultPath):
+        """
+        This method adds the attributes necessary to use the script.
+        At the end, refresh the self list
+        Args:
+            path: path where export the fbx
+        """
         # get active selection
         mSelList = OpenMaya.MGlobal.getActiveSelectionList()
         mSelList_It = OpenMaya.MItSelectionList(mSelList, OpenMaya.MFn.kTransform)
@@ -135,7 +129,7 @@ class FbxExporter(list):
             else:
                 # add attribute if it does not exist in the node
                 transform_fn.addAttribute(compoundAttr)
-                # Explanation: findPlug very useful to manipulate attr.
+                # Explanation: findPlug very useful to manipulate attr. this method returns a mplug from the name of the attr
                 pathAttr_plug = transform_fn.findPlug(self.attrPathName, True)
                 logger.debug('%s has added attribute %s: %s' % (transform, pathAttr_plug, transform_fn.hasAttribute(self.attrPathName)))
                 try:
@@ -150,31 +144,67 @@ class FbxExporter(list):
     def removeAttr(self, *items):
         """
         this method search the attributes on the denamded items.
+        If not items are argued, remove attr from selection
+        At the end, refresh the self list
         Args:
-            items: (str, pynode, ...) or [str, pynode, ...]
-
-        Returns: recalculate the list
+            items: (str, pynode, ...) or nothing
         """
+        # if nothing in arg items, create items list from selection
+        if not len(items):
+            items = pm.ls(sl=True, type='transform')
+
         for item in items:
             # check if item is pynode
             if not isinstance(item, pm.nodetypes.Transform):
-                logger.debug('Create Pynode: %s, %s' % (item, type(item)))
+                logger.debug('Create Pynode from: %s, %s' % (item, type(item)))
                 item = pm.PyNode(item)
 
             # deleteAttrs
-            for attr in (self.attrBoolName, self.attrPathName, self.attrCompoundName):
-                try:
-                    item.attr(attr).delete()
-                    logger.info('Remove attribute: %s.%s' % (item, attr))
+            try:
+                item.attr(self.attrCompoundName).delete()
+                logger.info('Remove attribute: %s.%s' % (item, self.attrCompoundName))
 
-                except:
-                    logger.info('Can not delete attr: %s' % attr)
+            except:
+                logger.warn('Can not delete attr: %s' % self.attrCompoundName)
+
+                # if compound attributes can not be removed, check if bool and path attributes exist and delete
+                for attr in (self.attrBoolName, self.attrPathName):
+                    try:
+                        item.attr(attr).delete()
+                        logger.info('Remove attribute: %s.%s' % (item, attr))
+
+                    except:
+                        logger.warn('Can not delete attr: %s' % attr)
 
         self.__constructList()
 
-
     def export(self):
-        pass
+        """
+        For each item in the class list, export it to attrPathName path.
+        Only if attr exp is True and visibility is True too.
+        """
+        for item in self:
+            # check values
+            if item.visibility and item.attr(self.attrBoolName).get():
+                # get path from path attribute
+                path = item.attr(self.attrPathName).get()
+
+                # check if path exist if not, jump next item
+                if not os.path.exists(path):
+                    logging.warn('Does not exist path: %s, %s' % (path, item))
+                    continue
+
+                path = os.path.join(path, str(item)+'.fbx')
+                path = os.path.normpath(path)
+
+                # select the exportable element, we use the flag -s in FBXExport to export selection
+                pm.select(item, r=True)
+                # Explanation to use FBXExport, we have to use pm.mel.eval pm.FBXExport is bugged
+                pm.mel.eval('FBXExport -f "%s" -s;' % path.replace('\\', '/'))  # we replace \ for /, if not maya give us an error
+
+                logging.info('%s exported to: %s' % (item, path))
+
+        pm.select(cl=True)
 
 """
 from FbxExporter import FbxExporter
