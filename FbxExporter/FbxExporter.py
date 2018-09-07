@@ -24,27 +24,30 @@ logger.setLevel(logging.DEBUG)
 class FbxExporter(list):
     attrBoolName = 'exp'
     attrPathName = 'FbxExpPath'
-    typeAttr = OpenMaya.MFnNumericData.kBoolean
-    typeAttr_Find = OpenMaya.MFn.kNumericAttribute
+    attrCompoundName = 'FbxExporter'
+
+    # typeAttr = OpenMaya.MFnNumericData.kBoolean
+    # this is unnecessary: typeAttr_Find = OpenMaya.MFn.kNumericAttribute
     defaultPath = os.getenv('MAYA_APP_DIR')
 
     def __init__(self):
         super(FbxExporter, self).__init__()
+        self.__constructList()
 
-    def constructList(self):
+    def __constructList(self):
         """
         This method fill the self.list
         Returns:
 
         """
-        # clear previous list
-        self[:] = []
+        # clear previous list and all references
+        del self[:]
 
         # search items
-        self = self.findAttr(self.attrBoolName, self.typeAttr_Find)
+        self.extend(self.__findAttr(self.attrBoolName))
         logger.debug('Class list items:%s items found: %s' % (len(self), self))
 
-    def findAttr(self, attr, type, *args):
+    def __findAttr(self, attr, *args):
         """
         Args:
             attr: Attribute desired
@@ -71,14 +74,19 @@ class FbxExporter(list):
             transform = mselList_It.getDagPath()
             transform_mfn = OpenMaya.MFnTransform(transform)
 
+            # use transform_mfn.hasAttribute() to avoid this loop
+            # fixme: actually, this method doesn not look for the attribute type
+            """
             for i in range(transform_mfn.attributeCount()):
                 transform_attr = transform_mfn.attribute(i)  # MObject
                 transform_plug = transform_mfn.findPlug(transform_attr, True).info
-                # fixme recollect float attributes, int, and boolean. better only boolean
-                # fixme use MFnTransform.hasAttribute() to avoid this loop
                 if transform_plug == '%s.%s' % (transform, attr) and transform_attr.apiType() == type:
                     transformReturn.append(pm.PyNode(transform))
                     break
+            """
+
+            if transform_mfn.hasAttribute(attr):
+                transformReturn.append(pm.PyNode(transform))
 
             mselList_It.next()
 
@@ -112,7 +120,7 @@ class FbxExporter(list):
 
             # compoundAttr
             fAttr = OpenMaya.MFnCompoundAttribute()
-            compoundAttr = fAttr.create('FbxExporter', 'fe')
+            compoundAttr = fAttr.create(self.attrCompoundName, 'fe')
             fAttr.addChild(boolAttr)
             fAttr.addChild(pathAttr)
             fAttr.keyable = True
@@ -127,6 +135,7 @@ class FbxExporter(list):
             else:
                 # add attribute if it does not exist in the node
                 transform_fn.addAttribute(compoundAttr)
+                # Explanation: findPlug very useful to manipulate attr.
                 pathAttr_plug = transform_fn.findPlug(self.attrPathName, True)
                 logger.debug('%s has added attribute %s: %s' % (transform, pathAttr_plug, transform_fn.hasAttribute(self.attrPathName)))
                 try:
@@ -136,9 +145,33 @@ class FbxExporter(list):
                     raise
 
             mSelList_It.next()
+        self.__constructList()
 
-    def removeAttr(self):
-        pass
+    def removeAttr(self, *items):
+        """
+        this method search the attributes on the denamded items.
+        Args:
+            items: (str, pynode, ...) or [str, pynode, ...]
+
+        Returns: recalculate the list
+        """
+        for item in items:
+            # check if item is pynode
+            if not isinstance(item, pm.nodetypes.Transform):
+                logger.debug('Create Pynode: %s, %s' % (item, type(item)))
+                item = pm.PyNode(item)
+
+            # deleteAttrs
+            for attr in (self.attrBoolName, self.attrPathName, self.attrCompoundName):
+                try:
+                    item.attr(attr).delete()
+                    logger.info('Remove attribute: %s.%s' % (item, attr))
+
+                except:
+                    logger.info('Can not delete attr: %s' % attr)
+
+        self.__constructList()
+
 
     def export(self):
         pass
