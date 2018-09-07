@@ -1,5 +1,9 @@
 import maya.api.OpenMaya as OpenMaya
 import pymel.core as pm
+import logging
+logging.basicConfig()
+logger = logging.getLogger('AttrFunctions:')
+logger.setLevel(logging.DEBUG)
 
 def findAttr(attr, *args):
     """
@@ -99,9 +103,32 @@ def addAttribute():
     
     m_node_fn.addAttribute(aCompound)
     
+def removeAttr(atributes=('exp'), *items):
+    """
+    this method search the attributes on the denamded items.
+    Args:
+        items(str): list of str or pynode we want to remove attr
+
+    Returns: recalculate the list
+    """
+    for item in items:
+        # check if item is pynode
+        if not isinstance(item, pm.nodetypes.Transform):
+            logger.debug('Create Pynode: %s, %s' % (item, type(item)))
+            item = pm.PyNode(item)
+
+        # deleteAttrs
+        for attr in atributes:
+            try:
+                item.attr(attr).delete()
+                logger.info('Remove attribute: %s.%s' % (item, attr))
+
+            except:
+                logger.info('Can not delete attr: %s' % attr)
 
 
 if __name__=='__main__':
     # findAttr('Exp')
-    listAttrTypes()
+    # listAttrTypes()
+    removeAttr(['exp'], 'pCube5')
     # addAttribute()
