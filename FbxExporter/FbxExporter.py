@@ -1,15 +1,4 @@
-# fbx Exporter V0.5.
-"""
-http://evgeniyzaitsev.com/2010/07/28/60/
- TODO the idea is add two attributes:
-    exp -> boolean // indicate if is exportable
-    path -> string // path where objects will be export
-
-    will export object and children. transform nodes only
-    script will search items with exp attr and path attr and construct a dictionary with them.
-    {self.object: [exp, path], self.object2: [exp, path], ...}
-
-"""
+# documentation: http://evgeniyzaitsev.com/2010/07/28/60/
 import pymel.core as pm
 import maya.api.OpenMaya as OpenMaya
 import os
@@ -25,7 +14,39 @@ class FbxExporter(list):
     attrCompoundName = 'FbxExporter'
     defaultPath = os.getenv('MAYA_APP_DIR')
 
+    # Instance variable holds on to the instance of this manager
+    _instance = None
+    # we have an instance class that prevents us creating multiple of this same class
+    # todo: better warning messages for instanced class, and error if class is called without .instance()
+    @classmethod
+    def instance(cls):
+        # if _instance = None, create a class instance
+        if cls._instance == None:
+            cls._instance = cls()
+        else:
+            logger.warn('Is already an instance of %s: %s' % (cls, hash(cls._instance)))
+        # returns a instance of the class stored in _instance
+        return cls._instance
+
+    __doc__ = """
+                    Fbx Exporter V0.5.
+                    FbxExporter.instance() for singleton
+                    Export object and children to a fbx.
+                    This script add two attributes to a transform node only.
+                        exp(boolean): indicate if is exportable
+                        path(string): path where objects will be export
+
+                    Then construct a list of pymel.core.nodetypes.Transform objects
+
+                    Methods:
+                        fbxExporter.addAtribute(): add attributes
+                        fbxExporter.RemoveAttr(): remove attributes
+                        fbxExporter.export():export items with the {0} attribute True""".format(attrBoolName)
+
     def __init__(self):
+        """
+        On creation, search exportable objects in scene with the attributes
+        """
         super(FbxExporter, self).__init__()
 
         # Construct list
@@ -33,7 +54,7 @@ class FbxExporter(list):
 
     def __constructList(self):
         """
-        This method fill the self.list
+        This method refresh and fill the self.list
 
         """
         # clear previous list and all references
@@ -47,7 +68,7 @@ class FbxExporter(list):
         """
         Args:
             attr: Attribute desired
-            *args: objects we want to check, if no *args check entire scene
+            args: objects we want to check, if no args check entire scene
 
         Returns: Pymel objects List that have the attribute
         """
@@ -71,8 +92,7 @@ class FbxExporter(list):
             transform_mfn = OpenMaya.MFnTransform(transform)
 
             # use transform_mfn.hasAttribute() to avoid this loop
-            # fixme: actually, this method doesn not look for the attribute type
-
+            # fixme: actually, this method does not look for the attribute type
             if transform_mfn.hasAttribute(attr):
                 transformReturn.append(pm.PyNode(transform))
 
@@ -179,10 +199,7 @@ class FbxExporter(list):
         self.__constructList()
 
     def export(self):
-        """
-        For each item in the class list, export it to attrPathName path.
-        Only if attr exp is True and visibility is True too.
-        """
+        self.__constructList()
         for item in self:
             # check values
             if item.visibility and item.attr(self.attrBoolName).get():
@@ -205,9 +222,14 @@ class FbxExporter(list):
                 logging.info('%s exported to: %s' % (item, path))
 
         pm.select(cl=True)
+    export.__doc__ = """
+                         Docstring For each item in the class list, export it to attrPathName path.
+                         Only if attr {0} is True and visibility is True too.""".format(attrBoolName)
+
 
 """
+to use:
 from FbxExporter import FbxExporter
 reload(FbxExporter)
-fbxExp = FbxExporter.FbxExporter()
+fbxExp = FbxExporter.FbxExporter.instance()
 """
