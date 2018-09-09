@@ -1,8 +1,10 @@
 """
+documentation: https://doc.qt.io/qtforpython/index.html
 TODO: FbxExporterUI
     We need:
         A widget with exportable objects:
             Here we can change exp attr or path attr. preferable with right click.
+            RightClick path, add new path
         Export button.
         AddObj button.
 
@@ -17,7 +19,7 @@ import pymel.core as pm
 import logging
 logging.basicConfig()
 logger = logging.getLogger('Fbx Exporter UI:')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # global var with fbxExporter obj
 fbxExporter = FbxExporter.instance()
@@ -29,7 +31,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
     BuildUI: construct of the UI
     Refresh info, with callbacks. if True, exportable path.
     """
-    def __init__(self, item):
+    def __init__(self, item, alphaColor=20):
         super(FbxExporterUIWidget, self).__init__()
 
         self.item = item
@@ -38,7 +40,14 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
             self.item = pm.PyNode(self.item)
 
         # TODO: background color variations
-        self.BGcolor = None
+        # explanation: palette colors: need to be visible, and setAutoFillBackground color, by default false
+        # self.setVisible(True)
+
+        self.setAutoFillBackground(True)
+        logger.debug(('%s widget visible: %s') % (str(item), self.isVisible()))
+        palette = self.palette()
+        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, alphaColor))
+        self.setPalette(palette)
 
         self.buildUI()
 
@@ -92,10 +101,11 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
 
     def getPath(self):
         global fbxExporter
-        self.item.attr(fbxExporter.attrPathName).set(getPathFunc(self.item.attr(fbxExporter.attrPathName)))
+        path = getPathFunc(self.item.attr(fbxExporter.attrPathName).get())
+        self.item.attr(fbxExporter.attrPathName).set(path)
 
         # update Tooltip
-        self.pathButton.setToolTip(self.item.attr(fbxExporter.attrPathName).get())
+        self.pathButton.setToolTip(path)
 
 class FbxExporterUI(QtWidgets.QWidget):
     """
@@ -130,7 +140,6 @@ class FbxExporterUI(QtWidgets.QWidget):
         self.buildUI()
         self._refresh()
         self.parent().layout().addWidget(self)  # add widget finding preiously the parent
-        self.distributeObj = None
 
     def buildUI(self):
         global fbxExporter
@@ -162,6 +171,8 @@ class FbxExporterUI(QtWidgets.QWidget):
         container_widget.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)  # adaptable
         self.container_layout = QtWidgets.QVBoxLayout(container_widget)
         self.container_layout.setAlignment(QtCore.Qt.AlignJustify)
+        self.container_layout.setSpacing(0)
+        # self.container_layout.addStretch(10)
         # now set that our widget have an scroll, this is a scroll area
         scrollArea = QtWidgets.QScrollArea()
         scrollArea.setWidgetResizable(True)
@@ -192,7 +203,9 @@ class FbxExporterUI(QtWidgets.QWidget):
         """
         global fbxExporter
         # add attributes // this method refresh the list
-        fbxExporter.addAttributes(getPathFunc(fbxExporter.attrPathName))
+        path = getPathFunc(fbxExporter.defaultPath)
+        logger.debug('Default path: %s , %s' % (path, fbxExporter.defaultPath))
+        fbxExporter.addAttributes(path)
 
         # refresh container
         self._refresh()
@@ -210,12 +223,16 @@ class FbxExporterUI(QtWidgets.QWidget):
             widget.deleteLater()
 
         # fill container
-        for item in fbxExporter:
-            widget = FbxExporterUIWidget(item)
+        for i, item in enumerate(fbxExporter):
+            alphaColor = 30
+            if i % 2:
+                alphaColor = 10
+
+            widget = FbxExporterUIWidget(item, alphaColor)
             self.container_layout.addWidget(widget)
 
 def getPathFunc(defaultPath):
-    pathWin = QtWidgets.QFileDialog.getExistingDirectory(getMayaWindow(), "Light Browser", defaultPath)
+    pathWin = QtWidgets.QFileDialog.getExistingDirectory(parent=getMayaWindow(), caption='FBX exporter browser', dir=defaultPath)
     if not pathWin:
         return defaultPath
     return pathWin
@@ -241,3 +258,11 @@ def getMayaWindow():
     win = omui.MQtUtil_mainWindow()
     ptr = wrapInstance(long(win), QtWidgets.QMainWindow)
     return ptr
+
+"""
+from FbxExporter import FbxExporterUI
+from FbxExporter import FbxExporter
+reload(FbxExporter)
+reload(FbxExporterUI)
+ui = FbxExporterUI.FbxExporterUI(True)
+"""
