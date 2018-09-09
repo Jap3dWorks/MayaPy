@@ -24,7 +24,7 @@ class FbxExporter(list):
         if cls._instance == None:
             cls._instance = cls()
         else:
-            logger.warn('Is already an instance of %s: %s' % (cls, hash(cls._instance)))
+            logger.warn('Is already an instance: %s' % cls)
         # returns a instance of the class stored in _instance
         return cls._instance
 
@@ -107,6 +107,7 @@ class FbxExporter(list):
         Args:
             path: path where export the fbx
         """
+        # todo: optional multiple paths
         # get active selection
         mSelList = OpenMaya.MGlobal.getActiveSelectionList()
         mSelList_It = OpenMaya.MItSelectionList(mSelList, OpenMaya.MFn.kTransform)
@@ -163,7 +164,7 @@ class FbxExporter(list):
 
     def removeAttr(self, *items):
         """
-        this method search the attributes on the denamded items.
+        this method search the attributes on the demanded items.
         If not items are argued, remove attr from selection
         At the end, refresh the self list
         Args:
@@ -198,11 +199,11 @@ class FbxExporter(list):
 
         self.__constructList()
 
-    def export(self):
+    def export(self, visible):
         self.__constructList()
         for item in self:
             # check values
-            if item.visibility and item.attr(self.attrBoolName).get():
+            if (item.visibility.get() or not visible) and item.attr(self.attrBoolName).get():
                 # get path from path attribute
                 path = item.attr(self.attrPathName).get()
 
@@ -226,6 +227,9 @@ class FbxExporter(list):
                          Docstring For each item in the class list, export it to attrPathName path.
                          Only if attr {0} is True and visibility is True too.""".format(attrBoolName)
 
+    def __hash__(self):
+        # review: do not understand this
+        return hash(len(self))
 
 """
 to use:
