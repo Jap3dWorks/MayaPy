@@ -252,7 +252,7 @@ class LightingManager(QtWidgets.QWidget):
 
     def saveLights(self):
         # save lights in a json
-        # properties dictionary will save all the parmeters
+        # properties dictionary will save all the parameters
         properties = {}
 
         # first get all the light widgets in our manager
