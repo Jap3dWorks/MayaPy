@@ -14,6 +14,7 @@ from FbxExporter import FbxExporter
 from PySide2 import QtCore, QtGui, QtWidgets
 from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
+import maya.api.OpenMaya as OpenMaya
 import pymel.core as pm
 
 import logging
@@ -40,11 +41,9 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
             self.item = pm.PyNode(self.item)
 
         # TODO: background color variations
-        # explanation: palette colors: need to be visible, and setAutoFillBackground color, by default false
-        # self.setVisible(True)
+        # explanation: palette colors: need setAutoFillBackground color, by default false
 
         self.setAutoFillBackground(True)
-        logger.debug(('%s widget visible: %s') % (str(item), self.isVisible()))
         palette = self.palette()
         palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, alphaColor))
         self.setPalette(palette)
@@ -55,40 +54,43 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         global fbxExporter
 
         layout = QtWidgets.QGridLayout(self)
-        layout.setAlignment(QtCore.Qt.AlignJustify)
+        layout.setMargin(15)
 
-        # leftLayout, label / chbox / pathButtons
-        left_widget = QtWidgets.QWidget()
-        left_layout = QtWidgets.QGridLayout(left_widget)
-        layout.addWidget(left_widget, 0, 0)
-
-        # name_button
-        name_button = QtWidgets.QPushButton(str(self.item))
-        left_layout.addWidget(name_button, 0, 0)
-        name_button.clicked.connect(lambda: pm.select(self.item))
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
 
         # chBox
         chBox = QtWidgets.QCheckBox(fbxExporter.attrBoolName)
-        left_layout.addWidget(chBox, 0, 1)
+        layout.addWidget(chBox, 0, 0)
         chBox.setChecked(self.item.attr(fbxExporter.attrBoolName).get())
         chBox.toggled.connect(lambda val: self.item.attr(fbxExporter.attrBoolName).set(val))
+
+        # middle_Layout: name // path
+        middle_widget = QtWidgets.QWidget()
+        middle_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+        middle_layout = QtWidgets.QGridLayout(middle_widget)
+        middle_layout.setSpacing(2)
+        layout.addWidget(middle_widget, 0, 1)
+
+        # name_button
+        name_button = QtWidgets.QPushButton(str(self.item))
+        middle_layout.addWidget(name_button, 0, 0)
+        name_button.clicked.connect(lambda: pm.select(self.item))
+        name_button.setContentsMargins(0, 0, 0, 0)
 
         # todo: multiple paths
         # pathButton
         self.pathButton = QtWidgets.QPushButton('Path')
         self.pathButton.setToolTip(self.item.attr(fbxExporter.attrPathName).get())
-        left_layout.addWidget(self.pathButton, 0, 2)
+        middle_layout.addWidget(self.pathButton, 0, 1)
         self.pathButton.clicked.connect(self.getPath)
+        self.pathButton.setContentsMargins(0, 0, 0, 0)
 
-        # Right layout
-        right_widget = QtWidgets.QWidget()
-        right_layout = QtWidgets.QGridLayout(right_widget)
-        layout.addWidget(right_widget, 0, 1)
         # delButton
-        delButton = QtWidgets.QPushButton('Delete')
-        right_layout.addWidget(delButton, 0, 0)
+        delButton = QtWidgets.QPushButton('X')
+        layout.addWidget(delButton, 0, 3)
         delButton.clicked.connect(self.delete)
         delButton.setToolTip('Delete from Fbx Exporter, not from scene')
+        delButton.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
 
     def delete(self):
         # delete widget
@@ -117,6 +119,7 @@ class FbxExporterUI(QtWidgets.QWidget):
 
     We fill the UI of FbxExpUIWidgets objects.
     """
+    idCallBack = []
     def __init__(self, dock=True):
         if dock:
             parent = getDock()
@@ -131,15 +134,29 @@ class FbxExporterUI(QtWidgets.QWidget):
             parent = QtWidgets.QDialog(parent=getMayaWindow())
             parent.setObjectName('FbxExporterUI')
             parent.setWindowTitle('Fbx Exporter')
-
+            # parent.closeEvent(lambda: logger.debug('clossing'))
+            # Review: do not work well if not dockable
             # add a layout
             dlgLayout = QtWidgets.QVBoxLayout(parent)
+            # dlgLayout.addWidget(self)
 
+        parent.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
         super(FbxExporterUI, self).__init__(parent=parent)
+        self.parent().layout().addWidget(self)  # add widget finding preiously the parent
+        # delete on close
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+
+        # when parent is destroyed, child launch close method. we connect the signals.
+        parent.destroyed.connect(self.close)
 
         self.buildUI()
-        self._refresh()
-        self.parent().layout().addWidget(self)  # add widget finding preiously the parent
+        self.__refresh()
+
+        # callBack
+        self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('SceneOpened', self.__refreshCallBack))
+        self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('NameChanged', self.__refreshCallBack))
+        # mObject = OpenMaya.MObject()
+        # self.idCallBack.append(OpenMaya.MNodeMessage.addNodeAboutToDeleteCallback(mObject, self.__refreshCallBack))
 
     def buildUI(self):
         global fbxExporter
@@ -147,6 +164,7 @@ class FbxExporterUI(QtWidgets.QWidget):
         # general layout
         general_layout = QtWidgets.QGridLayout(self)
         general_layout.setAlignment(QtCore.Qt.AlignHCenter)
+        general_layout.setMargin(0)
 
         # create upper grid, widgets // visible checkbox
         upper_Widget = QtWidgets.QWidget()
@@ -160,18 +178,29 @@ class FbxExporterUI(QtWidgets.QWidget):
         checkVi_widget = QtWidgets.QWidget()
         checkVi_Layout = QtWidgets.QGridLayout(checkVi_widget)
         upper_layout.addWidget(checkVi_widget, 0, 0)
-        upper_layout.setAlignment(QtCore.Qt.AlignRight)
         # checkBox
-        cvCheckBox = QtWidgets.QCheckBox('Export visible only')
+        cvCheckBox = QtWidgets.QCheckBox('Visible only')
         cvCheckBox.setChecked(True)
-        checkVi_Layout.addWidget(cvCheckBox)
+        checkVi_Layout.addWidget(cvCheckBox, 0, 0)
+        checkVi_Layout.setSpacing(0)
+        checkVi_Layout.setMargin(0)
+        # Add button
+        addButton = QtWidgets.QPushButton('Add')
+        checkVi_Layout.addWidget(addButton, 0, 1)
+        addButton.clicked.connect(self.add)
+        # Export Button
+        exportButton = QtWidgets.QPushButton('export')
+        exportButton.clicked.connect(lambda : fbxExporter.export(cvCheckBox.isChecked()))
+        checkVi_Layout.addWidget(exportButton, 0, 2)
+        exportButton.setToolTip('ToolTip')
 
         # container
         container_widget = QtWidgets.QWidget()
-        container_widget.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)  # adaptable
+
         self.container_layout = QtWidgets.QVBoxLayout(container_widget)
-        self.container_layout.setAlignment(QtCore.Qt.AlignJustify)
+        self.container_layout.setAlignment(QtCore.Qt.AlignTop)
         self.container_layout.setSpacing(0)
+        self.container_layout.setMargin(0)
         # self.container_layout.addStretch(10)
         # now set that our widget have an scroll, this is a scroll area
         scrollArea = QtWidgets.QScrollArea()
@@ -180,22 +209,6 @@ class FbxExporterUI(QtWidgets.QWidget):
         # Apply to scrollWidget
         scrollArea.setWidget(container_widget)
         upper_layout.addWidget(scrollArea, 1, 0)
-
-        # Bottom grid, Add // Export buttons
-        botom_Widget = QtWidgets.QWidget()
-        botom_layout = QtWidgets.QGridLayout(botom_Widget)
-        botom_layout.setAlignment(QtCore.Qt.AlignTop)
-        general_layout.addWidget(botom_Widget, 1, 0)
-        # elements Grid B
-        # Add button
-        addButton = QtWidgets.QPushButton('Add')
-        botom_layout.addWidget(addButton, 0, 0)
-        addButton.clicked.connect(self.add)
-        # Export Button
-        exportButton = QtWidgets.QPushButton('export')
-        exportButton.clicked.connect(lambda : fbxExporter.export(cvCheckBox.isChecked()))
-        botom_layout.addWidget(exportButton, 0, 1)
-        exportButton.setToolTip('ToolTip')
 
     def add(self):
         """
@@ -208,9 +221,16 @@ class FbxExporterUI(QtWidgets.QWidget):
         fbxExporter.addAttributes(path)
 
         # refresh container
-        self._refresh()
+        self.__refresh()
 
-    def _refresh(self):
+    def __refreshCallBack(self, *args):
+        global fbxExporter
+        # force refresh fbxExporter
+        fbxExporter.constructList()
+        self.__refresh()
+
+
+    def __refresh(self):
         """
         Refresh container, for add and remove options, or change attributes
         """
@@ -231,6 +251,23 @@ class FbxExporterUI(QtWidgets.QWidget):
             widget = FbxExporterUIWidget(item, alphaColor)
             self.container_layout.addWidget(widget)
 
+    # when close event, delete callbacks
+    def closeEvent(self, event):
+        logger.debug('closeEvent() from: %s' % self)
+        for i, val in enumerate(self.idCallBack):
+            # Event callback
+            try:
+                OpenMaya.MEventMessage.removeCallback(val)
+                logger.debug('Callback removed: %s' % i)
+            except:
+                pass
+            # node callback
+            try:
+                OpenMaya.MNodeMessage.removeCallback(val)
+                logger.debug('Callback removed: %s' % i)
+            except:
+                pass
+
 def getPathFunc(defaultPath):
     pathWin = QtWidgets.QFileDialog.getExistingDirectory(parent=getMayaWindow(), caption='FBX exporter browser', dir=defaultPath)
     if not pathWin:
@@ -243,10 +280,11 @@ def getDock(name='FbxExporterUIDock'):
     # Creates and manages the widget used to host windows in a layout
     # which enables docking and stacking windows together
     ctrl = pm.workspaceControl(name, dockToMainWindow=('right', 1), label='Fbx Exporter')
-    #we need the QT version, MQtUtil_findControl return the qt widget of the named maya control
+    # we need the QT version, MQtUtil_findControl return the qt widget of the named maya control
     qtCtrl = omui.MQtUtil_findControl(ctrl)
-    # translate to something python undertand
+    # translate to something python understand
     ptr = wrapInstance(long(qtCtrl), QtWidgets.QWidget)
+
     return ptr
 
 def deleteDock(name = 'FbxExporterUIDock'):
@@ -257,6 +295,7 @@ def getMayaWindow():
     #get maya main window
     win = omui.MQtUtil_mainWindow()
     ptr = wrapInstance(long(win), QtWidgets.QMainWindow)
+
     return ptr
 
 """
