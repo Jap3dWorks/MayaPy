@@ -111,6 +111,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
 
 class FbxExporterUI(QtWidgets.QWidget):
     """
+    Fbx Exporter UI V0.65.
     need: widget to fill, export button, add and remove buttons.
     addButton: ask for the path. enable multi object
     Class of general ui for FbxExporter
@@ -223,6 +224,7 @@ class FbxExporterUI(QtWidgets.QWidget):
         # refresh container
         self.__refresh()
 
+    # TODO: restructure refresh list methods, for construct fbxExporter list in this methods.
     def __refreshCallBack(self, *args):
         global fbxExporter
         # force refresh fbxExporter
@@ -248,6 +250,16 @@ class FbxExporterUI(QtWidgets.QWidget):
             if i % 2:
                 alphaColor = 10
 
+            # create on delete callback per obj
+            mSelectionList = OpenMaya.MSelectionList().add(str(item))
+            mObject = mSelectionList.getDependNode(0)
+            # if item already has a callback, do nothing
+            if not len(OpenMaya.MMessage.nodeCallbacks(mObject)):
+                logger.debug('New remove callback Callback: %s' % item)
+                self.idCallBack.append(OpenMaya.MModelMessage.addNodeRemovedFromModelCallback(mObject, self.__refreshCallBack))
+            mSelectionList.clear()  # review: try without clear
+
+            # create Widget
             widget = FbxExporterUIWidget(item, alphaColor)
             self.container_layout.addWidget(widget)
 
@@ -257,14 +269,8 @@ class FbxExporterUI(QtWidgets.QWidget):
         for i, val in enumerate(self.idCallBack):
             # Event callback
             try:
-                OpenMaya.MEventMessage.removeCallback(val)
-                logger.debug('Callback removed: %s' % i)
-            except:
-                pass
-            # node callback
-            try:
-                OpenMaya.MNodeMessage.removeCallback(val)
-                logger.debug('Callback removed: %s' % i)
+                OpenMaya.MMessage.removeCallback(val)
+                logger.debug('MMessage Callback removed: %s' % i)
             except:
                 pass
 
