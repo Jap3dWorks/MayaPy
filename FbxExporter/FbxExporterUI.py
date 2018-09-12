@@ -40,9 +40,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         if not isinstance(self.item, pm.nodetypes.Transform):
             self.item = pm.PyNode(self.item)
 
-        # TODO: background color variations
         # explanation: palette colors: need setAutoFillBackground color, by default false
-
         self.setAutoFillBackground(True)
         palette = self.palette()
         palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, alphaColor))
@@ -63,6 +61,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         layout.addWidget(chBox, 0, 0)
         chBox.setChecked(self.item.attr(fbxExporter.attrBoolName).get())
         chBox.toggled.connect(lambda val: self.item.attr(fbxExporter.attrBoolName).set(val))
+        chBox.setToolTip('Check to export')
 
         # middle_Layout: name // path
         middle_widget = QtWidgets.QWidget()
@@ -154,10 +153,9 @@ class FbxExporterUI(QtWidgets.QWidget):
         self.__refresh()
 
         # callBack
-        self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('SceneOpened', self.__refreshCallBack))
-        self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('NameChanged', self.__refreshCallBack))
-        # mObject = OpenMaya.MObject()
-        # self.idCallBack.append(OpenMaya.MNodeMessage.addNodeAboutToDeleteCallback(mObject, self.__refreshCallBack))
+        # todo add callback on duplicate object
+        self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('SceneOpened', self. __refresh))
+        self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('NameChanged', self. __refresh))
 
     def buildUI(self):
         global fbxExporter
@@ -175,13 +173,13 @@ class FbxExporterUI(QtWidgets.QWidget):
         # fill upper Grid
 
         # check box visibility
-        # TODO: alignment to right and color background
         checkVi_widget = QtWidgets.QWidget()
         checkVi_Layout = QtWidgets.QGridLayout(checkVi_widget)
         upper_layout.addWidget(checkVi_widget, 0, 0)
         # checkBox
         cvCheckBox = QtWidgets.QCheckBox('Visible only')
         cvCheckBox.setChecked(True)
+        cvCheckBox.setToolTip('Export only visible objects')
         checkVi_Layout.addWidget(cvCheckBox, 0, 0)
         checkVi_Layout.setSpacing(0)
         checkVi_Layout.setMargin(0)
@@ -189,11 +187,12 @@ class FbxExporterUI(QtWidgets.QWidget):
         addButton = QtWidgets.QPushButton('Add')
         checkVi_Layout.addWidget(addButton, 0, 1)
         addButton.clicked.connect(self.add)
+        addButton.setToolTip('Add objects to export, only transform nodes')
         # Export Button
         exportButton = QtWidgets.QPushButton('export')
-        exportButton.clicked.connect(lambda : fbxExporter.export(cvCheckBox.isChecked()))
+        exportButton.clicked.connect(lambda: fbxExporter.export(cvCheckBox.isChecked()))
         checkVi_Layout.addWidget(exportButton, 0, 2)
-        exportButton.setToolTip('ToolTip')
+        exportButton.setToolTip('Export FBX')
 
         # container
         container_widget = QtWidgets.QWidget()
@@ -224,18 +223,12 @@ class FbxExporterUI(QtWidgets.QWidget):
         # refresh container
         self.__refresh()
 
-    # TODO: restructure refresh list methods, for construct fbxExporter list in this methods.
-    def __refreshCallBack(self, *args):
-        global fbxExporter
-        # force refresh fbxExporter
-        fbxExporter.constructList()
-        self.__refresh()
-
-
-    def __refresh(self):
+    def __refresh(self, *args):
         """
         Refresh container, for add and remove options, or change attributes
         """
+        fbxExporter.constructList()
+
         global fbxExporter
         # private method for refresh list
         # clear container
@@ -245,10 +238,9 @@ class FbxExporterUI(QtWidgets.QWidget):
             widget.deleteLater()
 
         # fill container
+        # TODO: can be a good idea, change background color when active export of widget
         for i, item in enumerate(fbxExporter):
-            alphaColor = 30
-            if i % 2:
-                alphaColor = 10
+            alphaColor = 30 if i % 2 else 10
 
             # create on delete callback per obj
             mSelectionList = OpenMaya.MSelectionList().add(str(item))
@@ -256,7 +248,7 @@ class FbxExporterUI(QtWidgets.QWidget):
             # if item already has a callback, do nothing
             if not len(OpenMaya.MMessage.nodeCallbacks(mObject)):
                 logger.debug('New remove callback Callback: %s' % item)
-                self.idCallBack.append(OpenMaya.MModelMessage.addNodeRemovedFromModelCallback(mObject, self.__refreshCallBack))
+                self.idCallBack.append(OpenMaya.MModelMessage.addNodeRemovedFromModelCallback(mObject, self. __refresh))
             mSelectionList.clear()  # review: try without clear
 
             # create Widget
@@ -265,7 +257,6 @@ class FbxExporterUI(QtWidgets.QWidget):
 
     # when close event, delete callbacks
     def closeEvent(self, event):
-        logger.debug('closeEvent() from: %s' % self)
         for i, val in enumerate(self.idCallBack):
             # Event callback
             try:

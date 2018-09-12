@@ -160,7 +160,6 @@ class FbxExporter(list):
                     raise
 
             mSelList_It.next()
-        self.constructList()
 
     def removeAttr(self, *items):
         """
@@ -197,10 +196,7 @@ class FbxExporter(list):
                     except:
                         logger.warn('Can not delete attr: %s' % attr)
 
-        self.constructList()
-
     def export(self, visible):
-        self.constructList()
         for item in self:
             # check values
             if (item.visibility.get() or not visible) and item.attr(self.attrBoolName).get():
