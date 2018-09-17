@@ -125,10 +125,3 @@ def removeAttr(atributes=('exp'), *items):
 
             except:
                 logger.info('Can not delete attr: %s' % attr)
-
-
-if __name__=='__main__':
-    # findAttr('Exp')
-    # listAttrTypes()
-    removeAttr(['exp'], 'pCube5')
-    # addAttribute()
