@@ -72,7 +72,6 @@ class FbxExporter(list):
 
         Returns: Pymel objects List that have the attribute
         """
-
         mselList = OpenMaya.MSelectionList()
         # if some args are given
         if len(args):
@@ -108,6 +107,7 @@ class FbxExporter(list):
             path: path where export the fbx
         """
         # todo: optional multiple paths
+        # todo: extract attr creation out of the loop
         # get active selection
         mSelList = OpenMaya.MGlobal.getActiveSelectionList()
         mSelList_It = OpenMaya.MItSelectionList(mSelList, OpenMaya.MFn.kTransform)
@@ -126,8 +126,9 @@ class FbxExporter(list):
             fAttr.writable = True
 
             # string path
+            stringData = OpenMaya.MFnStringData().create(path)
             fAttr = OpenMaya.MFnTypedAttribute()
-            pathAttr = fAttr.create(self.attrPathName, 'pt', OpenMaya.MFnData.kString)
+            pathAttr = fAttr.create(self.attrPathName, 'pt', OpenMaya.MFnData.kString, stringData)
             fAttr.keyable = True
             fAttr.storable = True
             fAttr.readable = True
@@ -146,20 +147,46 @@ class FbxExporter(list):
             # check if we have yet the attribute
             if transform_fn.hasAttribute(self.attrBoolName):
                 logger.info('%s already has attribute: %s' % (transform, self.attrBoolName))
-
             else:
                 # add attribute if it does not exist in the node
                 transform_fn.addAttribute(compoundAttr)
-                # Explanation: findPlug very useful to manipulate attr. this method returns a mplug from the name of the attr
-                pathAttr_plug = transform_fn.findPlug(self.attrPathName, True)
-                logger.debug('%s has added attribute %s: %s' % (transform, pathAttr_plug, transform_fn.hasAttribute(self.attrPathName)))
-                try:
-                    pathAttr_plug.setString(path)
-                except:
-                    logger.error('Failed to entry path')
-                    raise
-
             mSelList_It.next()
+
+
+    def addExtraPathAttr(self, transform, path=defaultPath):
+        """
+        add extra path attribute, for extra exports
+        Args:
+            transform: MObject or pynode
+        """
+        if isinstance(transform, pm.nodetypes.Transform):
+            transform = OpenMaya.MSelectionList().add(str(transform)).getDependNode(0)
+
+        transform_fn = OpenMaya.MFnTransform(transform)
+        if not transform_fn.hasAttribute(self.attrCompoundName):
+            logger.info('%s does not has attribute: %s' % (transform_fn.fullPathName(), self.attrCompoundName))
+            return
+
+        compoudAttr = transform_fn.attribute(self.attrCompoundName)
+        compoudAttr_fn = OpenMaya.MFnCompoundAttribute(compoudAttr)
+        logger.debug('CompoundAttr: %s' % compoudAttr_fn.name)
+        compoudAttr_childs = compoudAttr_fn.numChildren()
+
+        stringData = OpenMaya.MFnStringData().create(path)  # mobject string data with path
+        fAttr = OpenMaya.MFnTypedAttribute()
+        pathAttr = fAttr.create('%s%s' % (self.attrPathName, compoudAttr_childs), 'pt%s' % compoudAttr_childs, OpenMaya.MFnData.kString, stringData)
+        fAttr.keyable = True
+        fAttr.storable = True
+        fAttr.readable = True
+        fAttr.writable = True
+        # add attribute
+        transform_fn.addAttribute(pathAttr)
+        logger.debug('Attr created: %s%s' % (self.attrPathName, compoudAttr_childs))
+
+        # add new path under compoundAttr
+        compoudAttr_fn.addChild(pathAttr)
+        logger.debug('Set as child')
+
 
     def removeAttr(self, *items):
         """
@@ -200,25 +227,27 @@ class FbxExporter(list):
         for item in self:
             # check values
             if (item.visibility.get() or not visible) and item.attr(self.attrBoolName).get():
-                # get path from path attribute
-                path = item.attr(self.attrPathName).get()
+                # get compound children
+                compoundAttributes = item.attr(self.attrCompoundName).get()[1:]
+                for path in compoundAttributes:
+                    # check if path exist if not, jump next item
+                    if not os.path.exists(path):
+                        logging.warn('Does not exist path: %s, %s' % (path, item))
+                        continue
 
-                # check if path exist if not, jump next item
-                if not os.path.exists(path):
-                    logging.warn('Does not exist path: %s, %s' % (path, item))
-                    continue
+                    path = os.path.join(path, str(item)+'.fbx')
+                    path = os.path.normpath(path)
+                    logger.debug('path: %s' % path)
 
-                path = os.path.join(path, str(item)+'.fbx')
-                path = os.path.normpath(path)
+                    # select the exportable element, we use the flag -s in FBXExport to export selection
+                    pm.select(item, r=True)
+                    # Explanation to use FBXExport, we have to use pm.mel.eval pm.FBXExport is bugged
+                    pm.mel.eval('FBXExport -f "%s" -s;' % path.replace('\\', '/'))  # we replace \ for /, if not maya give us an error
 
-                # select the exportable element, we use the flag -s in FBXExport to export selection
-                pm.select(item, r=True)
-                # Explanation to use FBXExport, we have to use pm.mel.eval pm.FBXExport is bugged
-                pm.mel.eval('FBXExport -f "%s" -s;' % path.replace('\\', '/'))  # we replace \ for /, if not maya give us an error
-
-                logging.info('%s exported to: %s' % (item, path))
+                    logging.info('%s exported to: %s' % (item, path))
 
         pm.select(cl=True)
+
     export.__doc__ = """
                          Docstring For each item in the class list, export it to attrPathName path.
                          Only if attr {0} is True and visibility is True too.""".format(attrBoolName)
