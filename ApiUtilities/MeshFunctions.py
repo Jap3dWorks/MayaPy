@@ -4,7 +4,7 @@ import logging
 
 logging.basicConfig()
 logger = logging.getLogger('MeshFunctions:')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 import pymel.core as pm
 
 """
@@ -212,17 +212,20 @@ def elementsDetect():
     while len(polyList):
         # convert to set ?
         # empty list to store a full element
-        polyListElement =[]
+        polyListElement = []
         polyListElement.append(polyList[0])  # append first poly index
 
         mItMeshPoly.setIndex(polyList[0])  # set to first element of the list
         polyListConnect = mItMeshPoly.getConnectedFaces()  # faces connected to first element
 
         polyListElement, polyList = getConnectedFaces(mItMeshPoly, polyListConnect, polyList, polyListElement, len(polyListElement))
+        logger.debug('elementsDetect: polyListElement: %s' % polyListElement)
 
         polyListElements.append(polyListElement)
+        logger.debug('elementDetect: polyListElements: %s' % polyListElements)
 
     logger.debug('elementDetect: polyListElements: %s' % polyListElements)
+    return polyListElements
 
 def getConnectedFaces(mItMeshPoly, polyListConnect, polyList, polyListElement, PLELen):
     connectedFaces = []  # store new border faces
