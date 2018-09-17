@@ -5,7 +5,7 @@ import pprint
 """
 implement material merge by name, include materials in dictionary, auto detect
 """
-#DIRECTORY = os.path.join(cmds.internalVar(userAppDir = True), 'controllerLibrary')
+# DIRECTORY = os.path.join(cmds.internalVar(userAppDir = True), 'controllerLibrary')
 DIRECTORY = os.path.join('D:\_docs', 'controllerLibrary')
 
 
@@ -13,14 +13,14 @@ class controllerLibrary(dict):
 	
 	def createDir(self, directory = DIRECTORY):
 		
-		#check if directory exist
+		# check if directory exist
 		if not os.path.exists(directory):
 			os.mkdir(directory)
 			
-	def save(self, name, screenShot = True, directory = DIRECTORY, **info):
+	def save(self, name, screenShot=True, directory=DIRECTORY, **info):
 		"""
-        The save function will save the current scene as a controller
-        Args:
+		The save function will save the current scene as a controller
+		Args:
             name: the name to save the controller as
             screenshot: Whether or not to save a screenshot
             directory: the directory to save to
@@ -28,31 +28,31 @@ class controllerLibrary(dict):
         """
 		self.createDir(directory)
 		path = os.path.join(directory, '%s.ma' % name)
-		#json path
+		# json path
 		infoFile = os.path.join(directory, '%s.json' % name)
 		
-		#call screenshot method
+		# call screenshot method
 		if screenShot:
 			info ['screenshot'] = self.saveScreenshot(name = name, directory = directory)
 			
 		info ['name'] = name
 		info ['path'] = path
 		
-		#rename file to what we want in to be saved as
-		#cmds.file(rename = path)
-		#something selected or not, first we set the path, now we save the file
+		# rename file to what we want in to be saved as
+		# cmds.file(rename = path)
+		# something selected or not, first we set the path, now we save the file
 		if cmds.ls(sl = True):
 			cmds.file(path, typ = 'mayaAscii', exportSelected = True, force = True)
 		else:
 			cmds.file(path, typ = 'mayaAscii', ea=True, force = True) # <--- make a save as not a save
-		#controllerLinrary is a dict class so we can store data in ourselves
-		#dictionary in a dictionary
+		# controllerLinrary is a dict class so we can store data in ourselves
+		# dictionary in a dictionary
 		self[name] = info
 		
 		with open(infoFile, 'w') as f:
 			json.dump(info, f, indent = 4)
 			
-	#find all the controllers in the given directory		
+	# find all the controllers in the given directory
 	def find(self, directory = DIRECTORY):
 		if not os.path.exists(directory):
 			return
