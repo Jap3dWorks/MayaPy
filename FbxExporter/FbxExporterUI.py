@@ -32,7 +32,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
     BuildUI: construct of the UI
     Refresh info, with callbacks. if True, exportable path.
     """
-    def __init__(self, item, alphaColor=20):
+    def __init__(self, item):
         super(FbxExporterUIWidget, self).__init__()
 
         self.item = item
@@ -40,13 +40,13 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         if not isinstance(self.item, pm.nodetypes.Transform):
             self.item = pm.PyNode(self.item)
 
+        self.buildUI()
+
         # explanation: palette colors: need setAutoFillBackground color, by default false
         self.setAutoFillBackground(True)
         palette = self.palette()
-        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, alphaColor))
+        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, 30 if self.chBox.isChecked() else 20))
         self.setPalette(palette)
-
-        self.buildUI()
 
     def buildUI(self):
         global fbxExporter
@@ -57,11 +57,11 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
 
         # chBox
-        chBox = QtWidgets.QCheckBox(fbxExporter.attrBoolName)
-        layout.addWidget(chBox, 0, 0)
-        chBox.setChecked(self.item.attr(fbxExporter.attrBoolName).get())
-        chBox.toggled.connect(lambda val: self.item.attr(fbxExporter.attrBoolName).set(val))
-        chBox.setToolTip('Check to export')
+        self.chBox = QtWidgets.QCheckBox(fbxExporter.attrBoolName)
+        layout.addWidget(self.chBox, 0, 0)
+        self.chBox.setChecked(self.item.attr(fbxExporter.attrBoolName).get())
+        self.chBox.toggled.connect(self.chBoxFunc)
+        self.chBox.setToolTip('Check to export')
 
         # middle_Layout: name // path
         middle_widget = QtWidgets.QWidget()
@@ -91,6 +91,14 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         delButton.setToolTip('Delete from Fbx Exporter, not from scene')
         delButton.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
 
+    def chBoxFunc(self, val):
+        self.item.attr(fbxExporter.attrBoolName).set(val)
+        palette = self.palette()
+        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, 30 if val else 20))
+        self.setPalette(palette)
+
+
+
     def delete(self):
         # delete widget
         global fbxExporter
@@ -110,7 +118,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
 
 class FbxExporterUI(QtWidgets.QWidget):
     """
-    Fbx Exporter UI V0.65.
+    Fbx Exporter UI V1.0
     need: widget to fill, export button, add and remove buttons.
     addButton: ask for the path. enable multi object
     Class of general ui for FbxExporter
@@ -240,8 +248,6 @@ class FbxExporterUI(QtWidgets.QWidget):
         # fill container
         # TODO: can be a good idea, change background color when active export of widget
         for i, item in enumerate(fbxExporter):
-            alphaColor = 30 if i % 2 else 10
-
             # create on delete callback per obj
             mSelectionList = OpenMaya.MSelectionList().add(str(item))
             mObject = mSelectionList.getDependNode(0)
@@ -252,7 +258,7 @@ class FbxExporterUI(QtWidgets.QWidget):
             mSelectionList.clear()  # review: try without clear
 
             # create Widget
-            widget = FbxExporterUIWidget(item, alphaColor)
+            widget = FbxExporterUIWidget(item)
             self.container_layout.addWidget(widget)
 
     # when close event, delete callbacks

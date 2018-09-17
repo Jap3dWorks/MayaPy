@@ -29,7 +29,7 @@ class FbxExporter(list):
         return cls._instance
 
     __doc__ = """
-                    Fbx Exporter V0.65.
+                    Fbx Exporter V1.0.
                     FbxExporter.instance() for singleton
                     Export object and children to a fbx.
                     This script add two attributes to a transform node only.
