@@ -106,7 +106,6 @@ class FbxExporter(list):
         Args:
             path: path where export the fbx
         """
-        # todo: optional multiple paths
         # todo: extract attr creation out of the loop
         # get active selection
         mSelList = OpenMaya.MGlobal.getActiveSelectionList()
@@ -150,6 +149,8 @@ class FbxExporter(list):
             else:
                 # add attribute if it does not exist in the node
                 transform_fn.addAttribute(compoundAttr)
+                
+
             mSelList_It.next()
 
 
@@ -188,50 +189,39 @@ class FbxExporter(list):
         logger.debug('Set as child')
 
     def removeExtraPath(self, transform, index):
+        """
+        Removes an attribute inside the compound attribute.
+        Removes the index attr and the rest of attributes, then recreate the rest of attributes.
+        Args:
+            transform: Pynode
+            index: index of attr to delete inside the compound attr
+        """
         assert isinstance(transform, pm.nodetypes.Transform), 'transform arg must be a pynode'
 
-        mSellist = OpenMaya.MSelectionList()
-        mSellist.add(str(transform))
-        mDagPath = mSellist.getDagPath(0)
-        mDependNode = mSellist.getDependNode(0)
+        # store path attributes
+        paths = transform.attr(self.attrCompoundName).get()
 
+        # get mDagPath
+        mSellist = OpenMaya.MSelectionList().add(str(transform))
+        mDagPath = mSellist.getDagPath(0)
+        # access to compound attribute, we need to delete desired paths
         mFnTransform = OpenMaya.MFnTransform(mDagPath)
         compoundAttr = mFnTransform.attribute(self.attrCompoundName)
-
         mfnCompoundAttr = OpenMaya.MFnCompoundAttribute(compoundAttr)
 
-        # store attributes
-        # todo: store attributes
-        try:
-            # TODO: try this reset maya
-            child = mfnCompoundAttr.child(index)
-            # logger.debug('Remove Child Attribute: %s.%s%s' % (str(transform), self.attrPathName, index))
-            # mfnCompoundAttr.removeChild(child)
-
-            mFnTransform.removeAttribute(child)
-
-        except:
-            logger.warn('can not delete attr: %s.%s%s' % (transform, self.attrPathName, index))
-
-        for i in range(index, mfnCompoundAttr.numChildren()):
-            typedAttr = mfnCompoundAttr.child(i)
-            print typedAttr
-            mfnTypedAttr = OpenMaya.MFnTypedAttribute(typedAttr)
-            mPlug = OpenMaya.MPlug(mDependNode, typedAttr)
-            path = str(mPlug.asString())
-            logger.debug('%s.%s: %s' % (str(transform), mfnTypedAttr.name, path))
-
+        for i in range(index, len(paths)):
             try:
-                # todo: rename with the api
-                newAttr = pm.renameAttr('%s.%s' % (str(transform), mfnTypedAttr.name), '%s%s' % (self.attrPathName, i))
-                pm.renameAttr('%s.%s' % (str(transform), mfnTypedAttr.shortName), 'pt%s' % i)
-                # fixme: path arrives empty
-                print ('pathis: '+path)
-                print newAttr
-                mPlug.setString(path)
+                # delete path attribute
+                child = mfnCompoundAttr.child(index)
+                mFnTransform.removeAttribute(child)
 
             except:
-                logger.warn('Error renaming attribute: %s.%s' % (str(transform), mfnTypedAttr.name))
+                logger.warn('can not delete attr: %s.%s%s' % (transform, self.attrPathName, index))
+
+        # once we have deleted all attributes, we recreate the rest of attributes
+        for i in range(index, len(paths)):
+            if i != index:
+                self.addExtraPathAttr(transform, paths[i])
 
 
     def removeAttr(self, *items):
