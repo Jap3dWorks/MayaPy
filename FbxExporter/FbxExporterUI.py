@@ -16,6 +16,7 @@ from shiboken2 import wrapInstance
 from maya import OpenMayaUI as omui
 import maya.api.OpenMaya as OpenMaya
 import pymel.core as pm
+from functools import partial
 
 import logging
 logging.basicConfig()
@@ -32,6 +33,7 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
     BuildUI: construct of the UI
     Refresh info, with callbacks. if True, exportable path.
     """
+    # TODO: context menu event for right click: remove paths
     def __init__(self, item):
         super(FbxExporterUIWidget, self).__init__()
 
@@ -40,13 +42,20 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         if not isinstance(self.item, pm.nodetypes.Transform):
             self.item = pm.PyNode(self.item)
 
+        # create actions for context menu
+        # self.createActions()
         self.buildUI()
 
+        # change colors background
         # explanation: palette colors: need setAutoFillBackground color, by default false
         self.setAutoFillBackground(True)
         palette = self.palette()
         palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, 30 if self.chBox.isChecked() else 20))
         self.setPalette(palette)
+
+        # context menu policy
+        self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)  # necessary for context menus
+        self.AddMenuActions()
 
     def buildUI(self):
         global fbxExporter
@@ -66,23 +75,18 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         # middle_Layout: name // path
         middle_widget = QtWidgets.QWidget()
         middle_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
-        middle_layout = QtWidgets.QGridLayout(middle_widget)
-        middle_layout.setSpacing(2)
+        self.middle_layout = QtWidgets.QGridLayout(middle_widget)
+        self.middle_layout.setSpacing(2)
         layout.addWidget(middle_widget, 0, 1)
 
         # name_button
         name_button = QtWidgets.QPushButton(str(self.item))
-        middle_layout.addWidget(name_button, 0, 0)
+        self.middle_layout.addWidget(name_button, 0, 0)
         name_button.clicked.connect(lambda: pm.select(self.item))
         name_button.setContentsMargins(0, 0, 0, 0)
 
-        # todo: multiple paths
         # pathButton
-        self.pathButton = QtWidgets.QPushButton('Path')
-        self.pathButton.setToolTip(self.item.attr(fbxExporter.attrPathName).get())
-        middle_layout.addWidget(self.pathButton, 0, 1)
-        self.pathButton.clicked.connect(self.getPath)
-        self.pathButton.setContentsMargins(0, 0, 0, 0)
+        self._getNumPaths()
 
         # delButton
         delButton = QtWidgets.QPushButton('X')
@@ -91,12 +95,12 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         delButton.setToolTip('Delete from Fbx Exporter, not from scene')
         delButton.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
 
+
     def chBoxFunc(self, val):
         self.item.attr(fbxExporter.attrBoolName).set(val)
         palette = self.palette()
         palette.setColor(QtGui.QPalette.Background, QtGui.QColor(40, 180, 255, 30 if val else 20))
         self.setPalette(palette)
-
 
 
     def delete(self):
@@ -108,13 +112,78 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
         # remove item attr
         fbxExporter.removeAttr(self.item)
 
-    def getPath(self):
-        global fbxExporter
-        path = getPathFunc(self.item.attr(fbxExporter.attrPathName).get())
-        self.item.attr(fbxExporter.attrPathName).set(path)
+    # context menu event
+    # documentation: https://doc-snapshots.qt.io/qtforpython/PySide2/QtWidgets/QWidget.html?highlight=qwidget#PySide2.QtWidgets.PySide2.QtWidgets.QWidget.contextMenuEvent
+    def AddMenuActions(self):
+        addExtraPath = QtWidgets.QAction(self)
+        addExtraPath.setText('Add Extra Path')
+        addExtraPath.triggered.connect(self.addExtraPath)
+        self.addAction(addExtraPath)
 
-        # update Tooltip
-        self.pathButton.setToolTip(path)
+    def addExtraPath(self):
+        global fbxExporter
+        # add extra path
+        path = getPathFunc(fbxExporter.defaultPath)  # default path
+        fbxExporter.addExtraPathAttr(self.item, path)
+
+        # delete all paths, and recreate
+        self._getNumPaths()
+
+    def _getNumPaths(self):
+        """
+        Get the number of paths and create the QPushbuttons for change path
+        """
+        global fbxExporter
+
+        # delete previous path buttons
+        for i in range(1, self.middle_layout.count()):
+            widget = self.middle_layout.itemAt(i).widget()
+            widget.setVisible(False)
+            widget.deleteLater()
+
+        # get paths and create buttons
+        pathAttributes = self.item.attr(fbxExporter.attrCompoundName).get()[1:]
+        for i, path in enumerate(pathAttributes):
+            pathButton = QtWidgets.QPushButton('Path %s' % (i + 1))
+            pathButton.setToolTip(path)
+
+            # add context menu to button
+            pathButton.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+            deletePath = QtWidgets.QAction(pathButton)
+            deletePath.triggered.connect(partial(self._deletePath, i+1))
+            deletePath.setText('Delete Path')
+            pathButton.addAction(deletePath)
+
+            # add buttons to grid
+            self.middle_layout.addWidget(pathButton, 0, i+1)
+            pathButton.clicked.connect(partial(self._changePath, i + 1))
+            pathButton.setContentsMargins(0, 0, 0, 0)
+
+    def _deletePath(self, index):
+        global fbxExporter
+        # remove path
+        fbxExporter.removeExtraPath(self.item, index)
+
+        # populate middle_layout
+        self._getNumPaths()
+
+
+    def _changePath(self, index):
+        """
+        change path attr path method
+        """
+        global fbxExporter
+
+        path = getPathFunc(self.item.attr('%s%s' % (fbxExporter.attrPathName, index)).get())
+        self.item.attr('%s%s' % (fbxExporter.attrPathName, index)).set(path)
+
+        # search button widget and change tooltip
+        # explanation: itemAt returns a PySide2.QtWidgets.QLayoutItem
+        # so we need use .widget() to access to the widget
+        # documentation: https://doc.qt.io/qtforpython/PySide2/QtWidgets/QLayoutItem.html#PySide2.QtWidgets.QLayoutItem
+
+        self.middle_layout.itemAt(index).widget().setToolTip(path)
+
 
 class FbxExporterUI(QtWidgets.QWidget):
     """

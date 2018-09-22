@@ -128,7 +128,7 @@ class FbxExporter(list):
             # string path
             stringData = OpenMaya.MFnStringData().create(path)
             fAttr = OpenMaya.MFnTypedAttribute()
-            pathAttr = fAttr.create(self.attrPathName, 'pt', OpenMaya.MFnData.kString, stringData)
+            pathAttr = fAttr.create('%s%s' % (self.attrPathName, 1), 'pt%s' % 1, OpenMaya.MFnData.kString, stringData)
             fAttr.keyable = True
             fAttr.storable = True
             fAttr.readable = True
@@ -186,6 +186,52 @@ class FbxExporter(list):
         # add new path under compoundAttr
         compoudAttr_fn.addChild(pathAttr)
         logger.debug('Set as child')
+
+    def removeExtraPath(self, transform, index):
+        assert isinstance(transform, pm.nodetypes.Transform), 'transform arg must be a pynode'
+
+        mSellist = OpenMaya.MSelectionList()
+        mSellist.add(str(transform))
+        mDagPath = mSellist.getDagPath(0)
+        mDependNode = mSellist.getDependNode(0)
+
+        mFnTransform = OpenMaya.MFnTransform(mDagPath)
+        compoundAttr = mFnTransform.attribute(self.attrCompoundName)
+
+        mfnCompoundAttr = OpenMaya.MFnCompoundAttribute(compoundAttr)
+
+        # store attributes
+        # todo: store attributes
+        try:
+            # TODO: try this reset maya
+            child = mfnCompoundAttr.child(index)
+            # logger.debug('Remove Child Attribute: %s.%s%s' % (str(transform), self.attrPathName, index))
+            # mfnCompoundAttr.removeChild(child)
+
+            mFnTransform.removeAttribute(child)
+
+        except:
+            logger.warn('can not delete attr: %s.%s%s' % (transform, self.attrPathName, index))
+
+        for i in range(index, mfnCompoundAttr.numChildren()):
+            typedAttr = mfnCompoundAttr.child(i)
+            print typedAttr
+            mfnTypedAttr = OpenMaya.MFnTypedAttribute(typedAttr)
+            mPlug = OpenMaya.MPlug(mDependNode, typedAttr)
+            path = str(mPlug.asString())
+            logger.debug('%s.%s: %s' % (str(transform), mfnTypedAttr.name, path))
+
+            try:
+                # todo: rename with the api
+                newAttr = pm.renameAttr('%s.%s' % (str(transform), mfnTypedAttr.name), '%s%s' % (self.attrPathName, i))
+                pm.renameAttr('%s.%s' % (str(transform), mfnTypedAttr.shortName), 'pt%s' % i)
+                # fixme: path arrives empty
+                print ('pathis: '+path)
+                print newAttr
+                mPlug.setString(path)
+
+            except:
+                logger.warn('Error renaming attribute: %s.%s' % (str(transform), mfnTypedAttr.name))
 
 
     def removeAttr(self, *items):
