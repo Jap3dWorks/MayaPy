@@ -55,14 +55,13 @@ class FbxExporter(list):
     def constructList(self):
         """
         This method refresh and fill the self.list
-
         """
         # clear previous list and all references
         del self[:]
 
-        # search items
-        self.extend(self.__findAttr(self.attrBoolName))
-        logger.debug('Class list items:%s items found: %s' % (len(self), self))
+        # search items and extend list
+        self.extend(self.__findAttr(self.attrCompoundName))
+        logger.debug('constructList: Class list items:%s items found: %s' % (len(self), self))
 
     def __findAttr(self, attr, *args):
         """
@@ -70,7 +69,7 @@ class FbxExporter(list):
             attr: Attribute desired
             args: objects we want to check, if no args check entire scene
 
-        Returns: Pymel objects List that have the attribute
+        Returns: Pymel.core.nodetypes.Transform objects List with the attribute
         """
         mselList = OpenMaya.MSelectionList()
         # if some args are given
@@ -90,8 +89,7 @@ class FbxExporter(list):
             transform = mselList_It.getDagPath()
             transform_mfn = OpenMaya.MFnTransform(transform)
 
-            # use transform_mfn.hasAttribute() to avoid this loop
-            # fixme: actually, this method does not look for the attribute type
+            # Check if obj has the attribute
             if transform_mfn.hasAttribute(attr):
                 transformReturn.append(pm.PyNode(transform))
 
@@ -102,7 +100,8 @@ class FbxExporter(list):
     def addAttributes(self, path=defaultPath):
         """
         This method adds the attributes necessary to use the script.
-        At the end, refresh the self list
+        At the end, refresh the self list.
+        Is necessary use constructList after this method for refresh the items list
         Args:
             path: path where export the fbx
         """
@@ -114,6 +113,7 @@ class FbxExporter(list):
         # iterate and find if items with the attribute, if have not, add.
         while not mSelList_It.isDone():
             transform = mSelList_It.getDagPath()
+            transform_DN = mSelList_It.getDependNode()
             transform_fn = OpenMaya.MFnTransform(transform)
 
             # create attributes
@@ -124,20 +124,10 @@ class FbxExporter(list):
             fAttr.readable = True
             fAttr.writable = True
 
-            # string path
-            stringData = OpenMaya.MFnStringData().create(path)
-            fAttr = OpenMaya.MFnTypedAttribute()
-            pathAttr = fAttr.create('%s%s' % (self.attrPathName, 1), 'pt%s' % 1, OpenMaya.MFnData.kString, stringData)
-            fAttr.keyable = True
-            fAttr.storable = True
-            fAttr.readable = True
-            fAttr.writable = True
-
             # compoundAttr
             fAttr = OpenMaya.MFnCompoundAttribute()
             compoundAttr = fAttr.create(self.attrCompoundName, 'fe')
             fAttr.addChild(boolAttr)
-            fAttr.addChild(pathAttr)
             fAttr.keyable = True
             fAttr.storable = True
             fAttr.readable = True
@@ -149,7 +139,8 @@ class FbxExporter(list):
             else:
                 # add attribute if it does not exist in the node
                 transform_fn.addAttribute(compoundAttr)
-                
+                self.addExtraPathAttr(transform_DN,path)
+
 
             mSelList_It.next()
 
@@ -158,7 +149,7 @@ class FbxExporter(list):
         """
         add extra path attribute, for extra exports
         Args:
-            transform: MObject or pynode
+            transform: MObject or Pymel.core.nodetypes.Transform
         """
         if isinstance(transform, pm.nodetypes.Transform):
             transform = OpenMaya.MSelectionList().add(str(transform)).getDependNode(0)
@@ -168,11 +159,13 @@ class FbxExporter(list):
             logger.info('%s does not has attribute: %s' % (transform_fn.fullPathName(), self.attrCompoundName))
             return
 
+        # get compound attr using api
         compoudAttr = transform_fn.attribute(self.attrCompoundName)
         compoudAttr_fn = OpenMaya.MFnCompoundAttribute(compoudAttr)
-        logger.debug('CompoundAttr: %s' % compoudAttr_fn.name)
+        logger.debug('addExtraPathAttr: CompoundAttr: %s' % compoudAttr_fn.name)
         compoudAttr_childs = compoudAttr_fn.numChildren()
 
+        # create new string attribute to store new path
         stringData = OpenMaya.MFnStringData().create(path)  # mobject string data with path
         fAttr = OpenMaya.MFnTypedAttribute()
         pathAttr = fAttr.create('%s%s' % (self.attrPathName, compoudAttr_childs), 'pt%s' % compoudAttr_childs, OpenMaya.MFnData.kString, stringData)
@@ -182,21 +175,21 @@ class FbxExporter(list):
         fAttr.writable = True
         # add attribute
         transform_fn.addAttribute(pathAttr)
-        logger.debug('Attr created: %s%s' % (self.attrPathName, compoudAttr_childs))
+        logger.debug('addExtraPathAttr: Attr created: %s%s' % (self.attrPathName, compoudAttr_childs))
 
-        # add new path under compoundAttr
+        # add new path attribute under compoundAttr
         compoudAttr_fn.addChild(pathAttr)
-        logger.debug('Set as child')
+        logger.debug('addExtraPathAttr: Set as child of %s: %s' % (compoudAttr_fn.name, fAttr.name))
 
     def removeExtraPath(self, transform, index):
         """
         Removes an attribute inside the compound attribute.
         Removes the index attr and the rest of attributes, then recreate the rest of attributes.
         Args:
-            transform: Pynode
+            transform: Pymel.core.nodetypes.Transform
             index: index of attr to delete inside the compound attr
         """
-        assert isinstance(transform, pm.nodetypes.Transform), 'transform arg must be a pynode'
+        assert isinstance(transform, pm.nodetypes.Transform), 'Transform arg must be a Pymel.core.nodetypes.Transform'
 
         # store path attributes
         paths = transform.attr(self.attrCompoundName).get()
@@ -211,9 +204,9 @@ class FbxExporter(list):
 
         for i in range(index, len(paths)):
             try:
-                # delete path attribute
-                child = mfnCompoundAttr.child(index)
-                mFnTransform.removeAttribute(child)
+                # delete path attribute inside compound attribute
+                child = mfnCompoundAttr.child(index)  # MObject attribute
+                mFnTransform.removeAttribute(child)  # use OpenMaya.MFnTransform to delete the attribute
 
             except:
                 logger.warn('can not delete attr: %s.%s%s' % (transform, self.attrPathName, index))
@@ -228,7 +221,7 @@ class FbxExporter(list):
         """
         this method search the attributes on the demanded items.
         If not items are argued, remove attr from selection
-        At the end, refresh the self list
+        Is necessary use constructList after this method for refresh the items list
         Args:
             items: (str, pynode, ...) or nothing
         """
@@ -260,6 +253,12 @@ class FbxExporter(list):
                         logger.warn('Can not delete attr: %s' % attr)
 
     def export(self, visible):
+        """
+        Export elements in the list with the bool attr True
+        Args:
+            visible: (Bool) If True, only export objects with visibility True
+
+        """
         for item in self:
             # check values
             if (item.visibility.get() or not visible) and item.attr(self.attrBoolName).get():

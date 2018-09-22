@@ -1,13 +1,5 @@
 """
 documentation: https://doc.qt.io/qtforpython/index.html
-TODO: FbxExporterUI
-    We need:
-        A widget with exportable objects:
-            Here we can change exp attr or path attr. preferable with right click.
-            RightClick path, add new path
-        Export button.
-        AddObj button.
-
 """
 from FbxExporter import FbxExporter
 
@@ -33,7 +25,6 @@ class FbxExporterUIWidget(QtWidgets.QWidget):
     BuildUI: construct of the UI
     Refresh info, with callbacks. if True, exportable path.
     """
-    # TODO: context menu event for right click: remove paths
     def __init__(self, item):
         super(FbxExporterUIWidget, self).__init__()
 
@@ -230,7 +221,7 @@ class FbxExporterUI(QtWidgets.QWidget):
         self.__refresh()
 
         # callBack
-        # todo add callback on duplicate object
+        # TODO: add callback on duplicate object
         self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('SceneOpened', self. __refresh))
         self.idCallBack.append(OpenMaya.MEventMessage.addEventCallback('NameChanged', self. __refresh))
 
@@ -315,16 +306,15 @@ class FbxExporterUI(QtWidgets.QWidget):
             widget.deleteLater()
 
         # fill container
-        # TODO: can be a good idea, change background color when active export of widget
         for i, item in enumerate(fbxExporter):
             # create on delete callback per obj
             mSelectionList = OpenMaya.MSelectionList().add(str(item))
             mObject = mSelectionList.getDependNode(0)
             # if item already has a callback, do nothing
             if not len(OpenMaya.MMessage.nodeCallbacks(mObject)):
-                logger.debug('New remove callback Callback: %s' % item)
+                logger.debug('__refresh: New remove callback Callback: %s' % item)
                 self.idCallBack.append(OpenMaya.MModelMessage.addNodeRemovedFromModelCallback(mObject, self. __refresh))
-            mSelectionList.clear()  # review: try without clear
+            # mSelectionList.clear()  # review: try without clear
 
             # create Widget
             widget = FbxExporterUIWidget(item)
