@@ -9,7 +9,7 @@ def FbxExporterInstall():
     DTag = 'FbxExporter'
     icLab = 'FbxExp'
     ann = 'Click export, Double click UI'
-    shelf = 'JAAShelf'
+    shelf = 'JAShelf'
     icon = 'fbxReview.png'
     
     command = """
