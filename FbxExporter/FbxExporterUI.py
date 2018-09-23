@@ -13,7 +13,7 @@ from functools import partial
 import logging
 logging.basicConfig()
 logger = logging.getLogger('Fbx Exporter UI:')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # global var with fbxExporter obj
 fbxExporter = FbxExporter.instance()

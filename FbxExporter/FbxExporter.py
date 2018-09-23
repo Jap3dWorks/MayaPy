@@ -6,7 +6,7 @@ import os
 import logging
 logging.basicConfig()
 logger = logging.getLogger('Fbx Exporter:')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class FbxExporter(list):
     attrBoolName = 'exp'
