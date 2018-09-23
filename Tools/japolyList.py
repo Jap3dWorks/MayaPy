@@ -4,41 +4,40 @@ import maya.cmds as mc
 # todo: review: and pymel convertion or api
 class japolyList(object):
     """
-	Create dictionaries on face selections, based in objects and materials
-	useful for more than 1 object selection.
-	attr:
-		objDic => a dictionary with objects and faces from selection
-		matDic => a dictionary with materials and faces from selection
-	"""
+    Create dictionaries on face selections, based in objects and materials
+    useful for more than 1 object selection.
+    attr:
+        objDic => a dictionary with objects and faces from selection
+        matDic => a dictionary with materials and faces from selection
+    """
 
     def __init__(self):
         self.objDic = {}
         self.matDic = {}
         iniSel = mc.ls(sl=True)
         self.polySel = mc.polyListComponentConversion(iniSel, fe=True, fv=True, fuv=True, ff=True, tf=True)
-        """
-		#construct obj dictioanry
-		"""
+
+        # construct obj dictioanry
         # review: iterators fastest with api
+
         for fce in self.polySel:
             obj, face = fce.split('.')
             sFaces = None
             sFaces = self.objDic.get(obj)
-            if sFaces == None:
+            if sFaces is None:
                 self.objDic[obj] = [fce]
             else:
                 sFaces.append(fce)
                 self.objDic[obj] = sFaces
 
-        """
-		#construct mat dictionary
-		"""
+        # construct mat dictionary
+
         for objM in self.objDic:
             grpIds = mc.ls(mc.listHistory(objM), type='groupId')
             shGrps = []
 
             # only one material object
-            if len(grpIds) == 0:
+            if 0 == len(grpIds):
                 lsShape = mc.listRelatives(objM, s=True)
                 shGrps = [mc.listConnections(lsShape, c=True, type='shadingEngine')[1]]
 
@@ -55,7 +54,7 @@ class japolyList(object):
                 facesMat = []
 
                 # only one material object
-                if len(grpIds) == 0:
+                if 0 == len(grpIds):
                     pNum = mc.polyEvaluate(f=True)
                     facesMat = mc.ls((objM + '.f[0:' + str(pNum - 1) + ']'), fl=True)
 
