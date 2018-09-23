@@ -1,6 +1,9 @@
 import maya.api.OpenMaya as OpenMaya
 import pymel.core as pm
 import logging
+import os
+import time
+import sys
 
 logging.basicConfig()
 logger = logging.getLogger('MeshFunctions:')
@@ -106,13 +109,18 @@ def intersectionAPI2():
     print (hit)
 
 def listElements():
+    """
+    Select one mesh object
+    Returns:(list) [set(facesElement1), set(facesElement2), ...]
+    """
+    startTime = time.time()
     mSelection = OpenMaya.MGlobal.getActiveSelectionList()
 
     mDagPath = mSelection.getDagPath(0)
     mDagPath.extendToShape()
 
     mfnMesh = OpenMaya.MFnMesh(mDagPath)
-    polyList = range(mfnMesh.numPolygons)  # first list with all index face. this will be deleted
+    polyList = set(range(mfnMesh.numPolygons))  # first list with all index face. this will be deleted
 
     mItMeshPoly = OpenMaya.MItMeshPolygon(mDagPath)
 
@@ -121,11 +129,12 @@ def listElements():
     while len(polyList):
         # convert to set ?
         # empty list to store a full element
-        polyListElement = []
-        polyListElement.append(polyList[0])  # append first poly index
+        polyListElement = set()
+        firstIndex = polyList.pop()  # get first index to operate
+        polyListElement.add(firstIndex)  # append first poly index
 
-        mItMeshPoly.setIndex(polyList[0])  # set to first element of the list
-        polyListConnect = mItMeshPoly.getConnectedFaces()  # faces connected to first element
+        mItMeshPoly.setIndex(firstIndex)  # set to first element
+        polyListConnect = set(mItMeshPoly.getConnectedFaces())  # faces connected to first element
 
         polyListElement, polyList = _getConnectedFaces(mItMeshPoly, polyListConnect, polyList, polyListElement, len(polyListElement))
         logger.debug('elementsDetect: polyListElement: %s' % polyListElement)
@@ -134,19 +143,22 @@ def listElements():
         logger.debug('elementDetect: polyListElements: %s' % polyListElements)
 
     logger.debug('elementDetect: polyListElements: %s' % polyListElements)
+
+    logger.info('--- %s seconds ---' % (time.time() - startTime))
     return polyListElements
 
 def _getConnectedFaces(mItMeshPoly, polyListConnect, polyList, polyListElement, PLELen):
-    connectedFaces = []  # store new border faces
+    connectedFaces = set()  # store new border faces
     # loop from previous border faces
     for i in polyListConnect:
         mItMeshPoly.setIndex(i)
-        connect = mItMeshPoly.getConnectedFaces()  # get border faces from a face
-        connectedFaces.extend([i for i in connect if i not in connectedFaces])
+        connect = set(mItMeshPoly.getConnectedFaces())  # get border faces from a face
 
-        polyListElement.extend([i for i in connect if i not in polyListElement])
+        connect.difference_update(polyListElement)
+        polyListElement.update(connect)
+        polyList.difference_update(connect)
 
-        polyList = [i for i in polyList if i not in polyListElement]
+        connectedFaces.update(connect)
 
     if len(polyListElement) == PLELen:
         logger.debug('getConnectedFaces: End')
