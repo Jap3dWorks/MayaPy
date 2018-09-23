@@ -108,13 +108,19 @@ def intersectionAPI2():
     pm.select('%s.f[%s]' % (dagPath0, hit[2]))
     print (hit)
 
-def listElements():
+def listElements(item=None):
     """
-    Select one mesh object
+    TODO: useful in code, not only for selection
+    Select one object
+    arg: item: MObject or string
     Returns:(list) [set(facesElement1), set(facesElement2), ...]
     """
     startTime = time.time()
-    mSelection = OpenMaya.MGlobal.getActiveSelectionList()
+    if not item:
+        mSelection = OpenMaya.MGlobal.getActiveSelectionList()
+    else:
+        mSelection = OpenMaya.MSelectionList()
+        mSelection.add(item)
 
     mDagPath = mSelection.getDagPath(0)
     mDagPath.extendToShape()
@@ -153,15 +159,15 @@ def _getConnectedFaces(mItMeshPoly, polyListConnect, polyList, polyListElement, 
     for i in polyListConnect:
         mItMeshPoly.setIndex(i)
         connect = set(mItMeshPoly.getConnectedFaces())  # get border faces from a face
-
         connect.difference_update(polyListElement)
+
         polyListElement.update(connect)
         polyList.difference_update(connect)
 
         connectedFaces.update(connect)
 
     if len(polyListElement) == PLELen:
-        logger.debug('getConnectedFaces: End')
+        logger.debug('_getConnectedFaces: End')
         return polyListElement, polyList
 
     return _getConnectedFaces(mItMeshPoly, connectedFaces, polyList, polyListElement, len(polyListElement))
