@@ -1,6 +1,9 @@
 from maya import cmds
 import maya.api.OpenMaya as om
 
+# TODO: Convert in plug in. node. with vertex face projection,
+# cut per edge of under poly surface
+
 class paintLines(object):
     
     def __init__(self):
@@ -19,7 +22,7 @@ class paintLines(object):
             CurveObjTr = cmds.listRelatives(CurveObjShpe, p = True) [0]
             COiniP, COsecondP = ['%s.cv[0]' %CurveObjTr, '%s.cv[1]' %CurveObjTr]
             
-            coPosP1  = cmds.xform (COiniP, q=True, t=True, ws=True)
+            coPosP1 = cmds.xform (COiniP, q=True, t=True, ws=True)
             coPosP2 = cmds.xform(COsecondP, q=True, t=True, ws=True)
             coVecX = [coPosP2[0] - coPosP1[0], coPosP2[1] - coPosP1[1], coPosP2[2] - coPosP1[2]]
             
@@ -71,6 +74,3 @@ class paintLines(object):
         cmds.polyNormalizeUV(mesh,normalizeType = 1, pa = True, cot = False, nd = 1)
         cmds.unfold(mesh, i = 5000, ss=0.001, gb = 0, pub = False, ps = False, oa = 1, us = False)
         cmds.select(cl=True)
-        
-        
-        
