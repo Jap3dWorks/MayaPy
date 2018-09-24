@@ -156,15 +156,17 @@ def listElements(item=None):
 def _getConnectedFaces(mItMeshPoly, polyListConnect, polyList, polyListElement, PLELen):
     connectedFaces = set()  # store new border faces
     # loop from previous border faces
+    connect = set()
     for i in polyListConnect:
         mItMeshPoly.setIndex(i)
-        connect = set(mItMeshPoly.getConnectedFaces())  # get border faces from a face
-        connect.difference_update(polyListElement)
+        connect.update(mItMeshPoly.getConnectedFaces())  # get border faces from a face
 
-        polyListElement.update(connect)
-        polyList.difference_update(connect)
+    connect.difference_update(polyListElement)
 
-        connectedFaces.update(connect)
+    polyListElement.update(connect)
+    polyList.difference_update(connect)
+
+    connectedFaces.update(connect)
 
     if len(polyListElement) == PLELen:
         logger.debug('_getConnectedFaces: End')
@@ -200,12 +202,9 @@ def listFaces(func=None):
 
         # iteration components
         while not mItFaces.isDone():
-            try:
-                faces.add(mItFaces.index())
-                # logger.debug(mItFaces.index())
+            faces.add(mItFaces.index())
+            # logger.debug(mItFaces.index())
 
-            except:
-                logger.debug('Is already in the list: %s' % mItFaces.index())
 
             mItFaces.next(True)
 
