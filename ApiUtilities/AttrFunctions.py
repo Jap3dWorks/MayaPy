@@ -48,11 +48,17 @@ def findAttr(attr, *args):
 def listAttrTypes():
     mSelList = OpenMaya.MGlobal.getActiveSelectionList()
     
-    mSelIt = OpenMaya.MItSelectionList(mSelList, OpenMaya.MFn.kTransform)
+    mSelIt = OpenMaya.MItSelectionList(mSelList)
     
     while not mSelIt.isDone():
-        transform =  mSelIt.getDagPath()
-        mfnTransform = OpenMaya.MFnTransform(transform)
+        try:
+            transform =  mSelIt.getDagPath()
+            mfnTransform = OpenMaya.MFnTransform(transform)
+        except:
+            transform = mSelIt.getDependNode()
+            mfnTransform = OpenMaya.MFnDependencyNode(transform)
+            
+        print transform
         
         for i in range(mfnTransform.attributeCount()):
             transformAttr = mfnTransform.attribute(i)
