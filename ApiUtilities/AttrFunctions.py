@@ -51,12 +51,9 @@ def listAttrTypes():
     mSelIt = OpenMaya.MItSelectionList(mSelList)
     
     while not mSelIt.isDone():
-        try:
-            transform =  mSelIt.getDagPath()
-            mfnTransform = OpenMaya.MFnTransform(transform)
-        except:
-            transform = mSelIt.getDependNode()
-            mfnTransform = OpenMaya.MFnDependencyNode(transform)
+
+        transform = mSelIt.getDependNode()
+        mfnTransform = OpenMaya.MFnDependencyNode(transform)
             
         print transform
         
