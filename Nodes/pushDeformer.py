@@ -88,16 +88,16 @@ class PushDeformer(ompx.MPxDeformerNode):
         )
 
         # now we can iterate throught the geometry vertices and do our deformation
-        while not geoIterator.isDone(): # geo iterator is ...
+        while not geoIterator.isDone():  # geo iterator is ...
             # current point index
             index = geoIterator.index()
             # look normal from our array
-            normal = om.MVector(normals[index]) # index may be int
+            normal = om.MVector(normals[index])  # index may be int
             # get the positions of the point
             position = geoIterator.position()
             # calculate the offset
             # multiply vector by magnitude
-            offset = (normal * push * envelope) # push is the input value //
+            offset = (normal * push * envelope)  # push is the input value //
 
             # we then query the painted weitght for this area
             weight = self.weightValue(data, geometryIndex, index) # from MPxDeformerNode class
