@@ -79,7 +79,7 @@ class positionOnCurve(OpenMaya.MPxNode):
 
         # obtain data handles for each attribute and values
         inputCurveHandle = pDataBlock.inputValue(positionOnCurve.inputCurveAttribute)  # get mDataHandle
-        inputCurve = inputCurveHandle.asNurbsCurve()  #mObject
+        inputCurve = inputCurveHandle.asNurbsCurve()  # mObject
 
         curvePositionHandle = pDataBlock.inputValue(positionOnCurve.curvePositionAttribute)  # get mDataHandle
         curvePosition = curvePositionHandle.asFloat()  #float
@@ -90,17 +90,19 @@ class positionOnCurve(OpenMaya.MPxNode):
         # compute
         # create curves fn
         inputCurveMfn = OpenMaya.MFnNurbsCurve(inputCurve)
+        # TODO: search dag node
+        inputCurveMfn.setObject(inputCurveMfn.getPath())  # set as dag path, to allow kworld transforms
         curveLenght = inputCurveMfn.length()
 
         pointPosition = curvePosition * curveLenght
         curveParam = inputCurveMfn.findParamFromLength(pointPosition)
         try:
-            curveNormal = inputCurveMfn.normal(curveParam)
+            curveNormal = inputCurveMfn.normal(curveParam, OpenMaya.MSpace.kWorld)
         except:
-            curveNormal = inputCurveMfn.normal(curveParam-0.001) if not curvePosition == 0 else inputCurveMfn.normal(curveParam+0.001)
-        curveTangent = inputCurveMfn.tangent(curveParam)
+            curveNormal = inputCurveMfn.normal(curveParam-0.001, OpenMaya.MSpace.kWorld) if not curvePosition == 0 else inputCurveMfn.normal(curveParam+0.001, OpenMaya.MSpace.kWorld)
+        curveTangent = inputCurveMfn.tangent(curveParam, OpenMaya.MSpace.kWorld)
         curveBinormal = curveTangent ^ curveNormal
-        curvePoint = inputCurveMfn.getPointAtParam(curveParam)
+        curvePoint = inputCurveMfn.getPointAtParam(curveParam, OpenMaya.MSpace.kWorld)
 
         # create transformMatrix
         mMatrix = OpenMaya.MFloatMatrix(((curveTangent.x, curveTangent.y, curveTangent.z, 0.0),
@@ -113,6 +115,8 @@ class positionOnCurve(OpenMaya.MPxNode):
 
         # Mark output as clean
         pDataBlock.setClean(pPlug)
+
+
 
 def initializePlugin(plugin):
     pluginFn = OpenMaya.MFnPlugin(plugin)
@@ -131,14 +135,29 @@ def uninitializePlugin(plugin):
         raise
 
 """
-To call this
-from TESTFOLDER import splinePosition
-reload(splinePosition)
+from Nodes import positionOnCurve
+# reload(positionOnCurve)
 from maya import cmds
-try:
+def connectPositionCurve():
+    #list curves
+    curveNode = cmds.ls(sl=True, type='nurbsCurve', dag=True)[0]
+    #list shape
+    meshNode = cmds.ls(sl=True, type='mesh', dag=True)[0]
+    transformNode = cmds.listRelatives(meshNode, p=True)[0]
+    
     # Force is important because of the undo stack
-    cmds.unloadPlugin(splinePosition.__file__, force=True)
-finally:
-    cmds.loadPlugin(splinePosition.__file__)
-cmds.createNode('splinePosition', name='splinePosition')
+    try:
+        cmds.unloadPlugin(positionOnCurve.__file__, force=True)
+    finally:
+        cmds.loadPlugin(positionOnCurve.__file__)
+    
+    positionOnCurveNode=cmds.createNode('positionOnCurve', name='positionOnCurve')
+    decomposeMatrixNode=cmds.createNode('decomposeMatrix', name='decomposeMatrix')
+    cmds.connectAttr('%s.Transformation' % positionOnCurveNode, '%s.inputMatrix' % decomposeMatrixNode)
+    
+    cmds.connectAttr('%s.worldSpace' % curveNode, '%s.Curve' % positionOnCurveNode)
+    cmds.connectAttr('%s.outputTranslate' % decomposeMatrixNode, '%s.translate' % transformNode)
+    cmds.connectAttr('%s.outputRotate' % decomposeMatrixNode, '%s.rotate' % transformNode)
+
+connectPositionCurve()
 """
