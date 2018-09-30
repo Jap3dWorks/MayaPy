@@ -1,9 +1,6 @@
 import maya.api.OpenMaya as OpenMaya
-import pymel.core as pm
 import logging
-import os
 import time
-import sys
 
 logging.basicConfig()
 logger = logging.getLogger('MeshFunctions:')
@@ -35,7 +32,7 @@ interesting methods
 
 def vertList(mesh=None, objectSpace=False):
     """
-    TODO: undo queue
+    TODO: undo queue, think only by command
     Opetate on vertes of a poligonal shape
     arg:
         mesh: tuple or list mesh to operate, transform node
@@ -110,7 +107,6 @@ def intersectionAPI2():
 
 def listElements(item=None):
     """
-    TODO: useful in code, not only for selection
     Select one object
     arg: item: MObject or string
     Returns:(list) [set(facesElement1), set(facesElement2), ...]
@@ -213,3 +209,56 @@ def listFaces(func=None):
         mItSelection.next()
 
     return geometries
+
+
+def createMesh(pointArray=((0, 0, -2.5), (5, 0, -2.5), (8, 0, 0), (5, 0, 2.5), (0, 0, 2.5)), polygons=(4, 3),
+               polyConects=(4, 3, 1, 0, 3, 2, 1)):
+    """
+    TODO: Return transform
+    Create a mesh with initialShadingGroup conected
+    Args:
+        pointArray: Vertex positions by index
+        polygons: Number of vertex per face index
+        polyConects: Index vertices that define a polygon
+
+    Returns:
+        MObject with the mesh
+        MDagPAth transform
+    """
+    # get initial shading group
+    mselectionList = OpenMaya.MSelectionList()
+    mselectionList.add('initialShadingGroup')
+
+    shadingGrp_MObj = mselectionList.getDependNode(0)
+    shadingGrp_MFn = OpenMaya.MFnDependencyNode(shadingGrp_MObj)
+    shGrpPlug = shadingGrp_MFn.findPlug('dagSetMembers', True)
+    shGrpPlugNumElements = shGrpPlug.evaluateNumElements()
+    logger.debug('createMesh: %s num elements: %s' % (shGrpPlug.name(), shGrpPlugNumElements))
+    # get the free element of the attr array
+
+    existingIndices = set(shGrpPlug.getExistingArrayAttributeIndices())
+    rangeExistingIndices = set(range(len(existingIndices) + 1))
+    rangeExistingIndices.difference_update(existingIndices)
+    shGrpPlugElement = shGrpPlug.elementByLogicalIndex(rangeExistingIndices.pop())
+    logger.debug('createMesh: %s is element: %s' % (shGrpPlugElement.name(), shGrpPlugElement.isElement))
+
+    # create Mesh function to operate with polygonal meshes
+    mFnMesh = OpenMaya.MFnMesh()
+
+    # vertices
+    mPointArray = OpenMaya.MPointArray(pointArray)
+
+    # polyConnects. is important the order for the face normal, antihorario
+    # create mesh
+    mesh_Object = mFnMesh.create(mPointArray, polygons, polyConects)
+    transform_Obj = OpenMaya.MDagPath().getAPathTo(mesh_Object)
+
+    meshPlug = mFnMesh.findPlug('instObjGroups', False)
+    meshPlugElement = meshPlug.elementByLogicalIndex(meshPlug.numElements())
+
+    # connect attribute
+    mdgModifier = OpenMaya.MDGModifier()
+    mdgModifier.connect(meshPlugElement, shGrpPlugElement)
+    mdgModifier.doIt()
+
+    return mesh_Object, transform_Obj
