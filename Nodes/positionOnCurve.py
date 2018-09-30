@@ -9,12 +9,12 @@ import maya.api.OpenMaya as OpenMaya
 def maya_useNewAPI():
     pass
 
-kPluginNodeName = 'splinePosition'
+kPluginNodeName = 'positionOnCurve'
 # identifier of the node
 kPluginNodeId = OpenMaya.MTypeId(0x010fff)
 
 # we use the maya proxy as base class for our node
-class splinePosition(OpenMaya.MPxNode):
+class positionOnCurve(OpenMaya.MPxNode):
     # define inputs
     inputCurveAttribute = OpenMaya.MObject()
     curvePositionAttribute = OpenMaya.MObject()
@@ -32,7 +32,7 @@ class splinePosition(OpenMaya.MPxNode):
         mfnAttr = OpenMaya.MFnNumericAttribute()
 
         # positionAttr
-        splinePosition.curvePositionAttribute = mfnAttr.create('Position', 'p', OpenMaya.MFnNumericData.kFloat, 0.5)
+        positionOnCurve.curvePositionAttribute = mfnAttr.create('Position', 'p', OpenMaya.MFnNumericData.kFloat, 0.5)
         mfnAttr.keyable = True
         mfnAttr.storable = True
         mfnAttr.readable = False
@@ -42,7 +42,7 @@ class splinePosition(OpenMaya.MPxNode):
 
         # transformationAttr
         mfnAttr = OpenMaya.MFnMatrixAttribute()
-        splinePosition.outputMatrixTransformAttribute = mfnAttr.create('Transformation', 't', 0)  # 1 double precision
+        positionOnCurve.outputMatrixTransformAttribute = mfnAttr.create('Transformation', 't', 0)  # 1 double precision
         mfnAttr.keyable = False
         mfnAttr.storable = True
         mfnAttr.readable = True
@@ -51,7 +51,7 @@ class splinePosition(OpenMaya.MPxNode):
 
         # curveAttr
         mfnAttr = OpenMaya.MFnTypedAttribute()
-        splinePosition.inputCurveAttribute = mfnAttr.create('Curve', 'c', 16)
+        positionOnCurve.inputCurveAttribute = mfnAttr.create('Curve', 'c', 16)
         mfnAttr.keyable = False
         mfnAttr.storable = False
         mfnAttr.readable = False
@@ -59,33 +59,33 @@ class splinePosition(OpenMaya.MPxNode):
         mfnAttr.hidden = False
 
         # attach attributes
-        splinePosition.addAttribute(splinePosition.curvePositionAttribute)
-        splinePosition.addAttribute(splinePosition.inputCurveAttribute)
-        splinePosition.addAttribute(splinePosition.outputMatrixTransformAttribute)
+        positionOnCurve.addAttribute(positionOnCurve.curvePositionAttribute)
+        positionOnCurve.addAttribute(positionOnCurve.inputCurveAttribute)
+        positionOnCurve.addAttribute(positionOnCurve.outputMatrixTransformAttribute)
 
         # define attributes relations to update
-        splinePosition.attributeAffects(splinePosition.inputCurveAttribute, splinePosition.outputMatrixTransformAttribute)
-        splinePosition.attributeAffects(splinePosition.curvePositionAttribute, splinePosition.outputMatrixTransformAttribute)
+        positionOnCurve.attributeAffects(positionOnCurve.inputCurveAttribute, positionOnCurve.outputMatrixTransformAttribute)
+        positionOnCurve.attributeAffects(positionOnCurve.curvePositionAttribute, positionOnCurve.outputMatrixTransformAttribute)
 
 
     def __init__(self):
-        super(splinePosition, self).__init__()
+        super(positionOnCurve, self).__init__()
 
     # plug represents output attribute
     # dataBlock all inputs values
     def compute(self, pPlug, pDataBlock):
-        if pPlug != splinePosition.outputMatrixTransformAttribute:
+        if pPlug != positionOnCurve.outputMatrixTransformAttribute:
             return None
 
         # obtain data handles for each attribute and values
-        inputCurveHandle = pDataBlock.inputValue(splinePosition.inputCurveAttribute)  # get mDataHandle
+        inputCurveHandle = pDataBlock.inputValue(positionOnCurve.inputCurveAttribute)  # get mDataHandle
         inputCurve = inputCurveHandle.asNurbsCurve()  #mObject
 
-        curvePositionHandle = pDataBlock.inputValue(splinePosition.curvePositionAttribute)  # get mDataHandle
+        curvePositionHandle = pDataBlock.inputValue(positionOnCurve.curvePositionAttribute)  # get mDataHandle
         curvePosition = curvePositionHandle.asFloat()  #float
 
         # obtain outputHandle
-        outputMatrixTransformHandle = pDataBlock.outputValue(splinePosition.outputMatrixTransformAttribute)  # get mDataHandle
+        outputMatrixTransformHandle = pDataBlock.outputValue(positionOnCurve.outputMatrixTransformAttribute)  # get mDataHandle
 
         # compute
         # create curves fn
@@ -117,7 +117,7 @@ class splinePosition(OpenMaya.MPxNode):
 def initializePlugin(plugin):
     pluginFn = OpenMaya.MFnPlugin(plugin)
     try:
-        pluginFn.registerNode(kPluginNodeName, kPluginNodeId, splinePosition.creator, splinePosition.initialize)
+        pluginFn.registerNode(kPluginNodeName, kPluginNodeId, positionOnCurve.creator, positionOnCurve.initialize)
     except:
         sys.stderr.write('Failed to register node: ' + kPluginNodeName)
         raise
