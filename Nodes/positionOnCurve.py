@@ -1,6 +1,7 @@
 import sys
 
 import maya.api.OpenMaya as OpenMaya
+import maya.api.OpenMayaUI as OpenMayaUI
 # documentation: https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__files_GUID_AABB9BB4_816F_4C7C_A526_69B0568E1587_htm
 # documentation: https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__files_GUID_767D6572_552D_4D94_90E2_AE626F276D37_htm
 # documentation: https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__files_GUID_C5A68952_EB7D_41CC_ABF5_CC4C63293EED_htm
@@ -14,7 +15,7 @@ kPluginNodeName = 'positionOnCurve'
 kPluginNodeId = OpenMaya.MTypeId(0x010fff)
 
 # we use the maya proxy as base class for our node
-class positionOnCurve(OpenMaya.MPxNode):
+class positionOnCurve(OpenMayaUI.MPxLocatorNode):
     # define inputs
     inputCurveAttribute = OpenMaya.MObject()
     curvePositionAttribute = OpenMaya.MObject()
@@ -30,6 +31,13 @@ class positionOnCurve(OpenMaya.MPxNode):
     def initialize():
         # create attributes
         mfnAttr = OpenMaya.MFnNumericAttribute()
+
+        # Ramp attribute
+        rampAttrFn = OpenMaya.MRampAttribute()
+        rampAttribute = rampAttrFn.createCurveRamp('curveRamp', 'curveRamp')
+
+
+        positionOnCurve.addAttribute(rampAttribute)
 
         # positionAttr
         positionOnCurve.curvePositionAttribute = mfnAttr.create('Position', 'p', OpenMaya.MFnNumericData.kFloat, 0.5)
@@ -67,6 +75,8 @@ class positionOnCurve(OpenMaya.MPxNode):
         positionOnCurve.attributeAffects(positionOnCurve.inputCurveAttribute, positionOnCurve.outputMatrixTransformAttribute)
         positionOnCurve.attributeAffects(positionOnCurve.curvePositionAttribute, positionOnCurve.outputMatrixTransformAttribute)
 
+        # rampAttr
+        positionOnCurve.attributeAffects(rampAttribute, positionOnCurve.outputMatrixTransformAttribute)
 
     def __init__(self):
         super(positionOnCurve, self).__init__()
@@ -79,10 +89,10 @@ class positionOnCurve(OpenMaya.MPxNode):
 
         # obtain data handles for each attribute and values
         inputCurveHandle = pDataBlock.inputValue(positionOnCurve.inputCurveAttribute)  # get mDataHandle
-        inputCurve = inputCurveHandle.asNurbsCurve()  # mObject
+        inputCurve = inputCurveHandle.asNurbsCurveTransformed()  # mObject
 
         curvePositionHandle = pDataBlock.inputValue(positionOnCurve.curvePositionAttribute)  # get mDataHandle
-        curvePosition = curvePositionHandle.asFloat()  #float
+        curvePosition = curvePositionHandle.asFloat()  # float
 
         # obtain outputHandle
         outputMatrixTransformHandle = pDataBlock.outputValue(positionOnCurve.outputMatrixTransformAttribute)  # get mDataHandle
@@ -91,18 +101,17 @@ class positionOnCurve(OpenMaya.MPxNode):
         # create curves fn
         inputCurveMfn = OpenMaya.MFnNurbsCurve(inputCurve)
         # TODO: search dag node
-        inputCurveMfn.setObject(inputCurveMfn.getPath())  # set as dag path, to allow kworld transforms
         curveLenght = inputCurveMfn.length()
 
         pointPosition = curvePosition * curveLenght
         curveParam = inputCurveMfn.findParamFromLength(pointPosition)
         try:
-            curveNormal = inputCurveMfn.normal(curveParam, OpenMaya.MSpace.kWorld)
+            curveNormal = inputCurveMfn.normal(curveParam)
         except:
-            curveNormal = inputCurveMfn.normal(curveParam-0.001, OpenMaya.MSpace.kWorld) if not curvePosition == 0 else inputCurveMfn.normal(curveParam+0.001, OpenMaya.MSpace.kWorld)
-        curveTangent = inputCurveMfn.tangent(curveParam, OpenMaya.MSpace.kWorld)
+            curveNormal = inputCurveMfn.normal(curveParam-0.001) if not curvePosition == 0 else inputCurveMfn.normal(curveParam+0.001)
+        curveTangent = inputCurveMfn.tangent(curveParam)
         curveBinormal = curveTangent ^ curveNormal
-        curvePoint = inputCurveMfn.getPointAtParam(curveParam, OpenMaya.MSpace.kWorld)
+        curvePoint = inputCurveMfn.getPointAtParam(curveParam)
 
         # create transformMatrix
         mMatrix = OpenMaya.MFloatMatrix(((curveTangent.x, curveTangent.y, curveTangent.z, 0.0),
