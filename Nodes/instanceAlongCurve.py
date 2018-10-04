@@ -3,16 +3,18 @@
 # original script via mmerchante
 # https://github.com/mmerchante
 
+# TODO: to maya.api 2
+
 import sys
 import math
 import random
 import traceback
 import maya.mel as mel
 import pymel.core as pm
-import maya.OpenMaya as OpenMaya
-import maya.OpenMayaUI as OpenMayaUI
-import maya.OpenMayaMPx as OpenMayaMPx
-import maya.OpenMayaRender as OpenMayaRender
+import maya.api.OpenMaya as OpenMaya
+import maya.api.OpenMayaUI as OpenMayaUI
+import maya.api.OpenMayaMPx as OpenMayaMPx
+import maya.api.OpenMayaRender as OpenMayaRender
 
 kPluginVersion = "0.0"
 kPluginCmdName = "instanceAlongCurve"
@@ -103,3 +105,26 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
             self.useDynamicAmplitudeValues = False
 
             amplitudePlug = OpenMaya.MPlug(mObject, rampAttr.rampAmplitude)
+            
+            if amplitudePlug.isConected():
+                # get connected input plugs
+                connections = amplitudePlug.connectedTo(True, False)
+                
+                # Find input transform
+                if connections.length()==1:
+                    node = connections[0].node()
+                    nodeFn = OpenMaya.MFnDependencyNode(node)
+                    
+                    resultColors = OpenMaya.MFloatVectorArray()
+                    resultTransparencies = OpenMaya.MFloatVectorArray()
+                    
+                    uValues = OpenMaya.MFloatArray(instanceCount, 0.0)
+                    vValues = OpenMaya.MFloatArray(instanceCount, 0.0)
+                    
+                    # Sample a line, for more user flexibility
+                    for i in xrange(instanceCount):
+                        uValues.set(i / float(instanceCount), i)
+                        uValues.set(i / float(instanceCount), i)
+                        
+                        # ##
+                        
