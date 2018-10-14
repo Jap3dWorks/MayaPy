@@ -128,3 +128,42 @@ def removeAttr(atributes=('exp'), *items):
 
             except:
                 logger.info('Can not delete attr: %s' % attr)
+
+
+# api 1
+def getSingleSourceObjectFromPlug(plug):
+    """
+        plug: attribute MObject
+        Returns: MObject
+    """
+    if plug.isConnected():
+        # Get connected input plugs
+        connections = OpenMaya.MPlugArray()
+        plug.connectedTo(connections, True, False)
+
+        # Find input transform
+        if connections.length() == 1:
+            return connections[0].node()
+
+    return None
+
+def getFnFromPlug(plug, fnType):
+    """
+        plug: attribute MObject
+        fnType: type object
+        Returns: dagPath of object type
+    """
+    node = getSingleSourceObjectFromPlug(plug)
+
+    # Get Fn from a DAG path to get the world transformations correctly
+    if node is not None:
+        path = OpenMaya.MDagPath()
+        trFn = OpenMaya.MFnDagNode(node)
+        trFn.getPath(path)
+
+        path.extendToShape()
+
+        if path.node().hasFn(fnType):
+            return path
+
+    return None
