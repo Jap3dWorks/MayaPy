@@ -13,7 +13,6 @@ import maya.mel as mel
 # documentation: https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__files_GUID_C5A68952_EB7D_41CC_ABF5_CC4C63293EED_htm
 # documentation: https://stackoverflow.com/questions/50365958/maya-mpxnode-multiple-outputs
 
-# TODO: Manip position enhancements: change position, change range
 # TODO: AE TEMPLATE
 
 kPluginVersion = "0.0"
@@ -159,6 +158,64 @@ class positionOnCurve(OpenMayaMPx.MPxLocatorNode):
         pDataBlock.setClean(pPlug)
 
 
+# AETemplate
+def loadAETemplateCallback(nodeName):
+    AEpositionOnCurveTemplate(nodeName)
+
+# documentation: http://help.autodesk.com/cloudhelp/2017/CHS/Maya-Tech-Docs/Commands/editorTemplate.html
+class AEpositionOnCurveTemplate(pm.ui.AETemplate):
+    print('class AE')
+    def addControll(self, control, label=None, **kwargs):
+        pm.ui.AETemplate.addControl(self, control, label=label, **kwargs)
+
+    def beginLayout(self, name, collapse=True):
+        pm.ui.AETemplate.beginLayout(self, name, collapse=collapse)
+
+    def __init__(self, nodeName):
+        super(AEpositionOnCurveTemplate, self).__init__(nodeName)
+        self.thisNode = None
+        print('init AE')
+        node = pm.PyNode(nodeName)
+        print node.type()
+        if node.type() == kPluginNodeName:
+            print('Goood AE')
+
+            for attr in pm.listAttr(nodeName):
+                self.suppress(attr)
+                print ('suppress %s.%s' % (nodeName, attr))
+
+            self.callCustom(lambda: self.showTitle(), lambda: None)
+
+            self.beginScrollLayout()
+            self.beginLayout('General', collapse=False)
+
+            annotation = 'something'
+            # controlls
+            self.addControll('ManipValue', label='Manip Value', annotation=annotation)
+            self.endLayout()
+
+            # ramp control
+            self.beginLayout('RampControl', collapse=True)
+            mel.eval('AEaddRampControl("' + nodeName + '.curveRamp");')
+            self.endLayout()
+
+            self.beginLayout('General2', collapse=False)
+            self.addControll('Position', label='Position', annotation=annotation)
+
+            self.addControll('Transformation', label='Transformation', annotation=annotation)
+
+            self.addControll('Curve', label='curve', annotation=annotation)
+
+            self.endLayout()
+
+            self.endScrollLayout()
+
+
+
+    def showTitle(self):
+        pm.text('Position On Curve v' + kPluginVersion, font='boldLabelFont')
+
+
 # command
 class positionOnCurveCommand(OpenMayaMPx.MPxCommand):
     def __init__(self):
@@ -284,35 +341,60 @@ class positionOnCurveManip(OpenMayaMPx.MPxManipContainer):
     def connectToDependNode(self, node):
         self.nodeFn.setObject(node)
         # input curve plug
-        curvePlug = self.nodeFn.findPlug(positionOnCurve.curvePositionAttribute)
 
-        # self.curveFn = OpenMaya.MFnNurbsCurve(getFnFromPlug(curvePlug, OpenMaya.MFn.kNurbsCurve))
-        # maxParam = self.curveFn.findParamFromLength(self.curveFn.length())
+        curvePositionPlug = self.nodeFn.findPlug(positionOnCurve.curvePositionAttribute)
+        curvePlug = self.nodeFn.findPlug(positionOnCurve.inputCurveAttribute)
+
+        connections = OpenMaya.MPlugArray()
+        curvePlug.connectedTo(connections, True, False)
+        curveNodeFn = OpenMaya.MFnDagNode(connections[0].node())
+        curveNode = OpenMaya.MDagPath()
+        curveNodeFn.getPath(curveNode)
+
+        curveFn = OpenMaya.MFnNurbsCurve(curveNode)
+        manipPos = OpenMaya.MPoint()
+        curveFn.getPointAtParam(0.001, manipPos, OpenMaya.MSpace.kWorld)
 
         # get curve position plug
-        # curvePositionPlug = self.curveFn.findPlug(positionOnCurve.curvePositionAttribute)
-
-        # connect ont to one manip
+        # and set manip translation
         distanceManipFn = OpenMayaUI.MFnDistanceManip(self.distManip)
-        distanceManipFn.setDirection(OpenMaya.MVector(0,1,0))
-        distanceManipFn.connectToDistancePlug(curvePlug)
+        distanceManipFn.setDirection(OpenMaya.MVector(0, 1, 0))
+        distanceManipFn.connectToDistancePlug(curvePositionPlug)
+        distanceManipFn.setTranslation(OpenMaya.MVector(manipPos), OpenMaya.MSpace.kWorld)
+        mscriptutil = OpenMaya.MScriptUtil()
 
-        # distanceIndex = distanceManipFn.distanceIndex()
-        # print('distance index is: %s' % distanceIndex)
-        # self.addPlugToManipConversion(distanceIndex)
+        # scale Manip
+        mscriptutil.createFromList([10, 10, 10], 3)
+        scaleDoubleArrayPtr = mscriptutil.asDoublePtr()
+
+        distanceManipFn.setScale(scaleDoubleArrayPtr)
 
         self.finishAddingManips()
         OpenMayaMPx.MPxManipContainer.connectToDependNode(self, node)
 
 
+
+
+
+
+
+
+
 def initializePlugin(plugin):
     pluginFn = OpenMayaMPx.MFnPlugin(plugin, 'Jap3D', kPluginVersion)
     try:
-        # register node
-        pluginFn.registerNode(kPluginNodeName, kPluginNodeId, positionOnCurve.creator, positionOnCurve.initialize)
         # register command, no initialize need for commands
         pluginFn.registerCommand(kPluginNodeNameCommand, positionOnCurveCommand.cmdCreator)
-        pluginFn.registerNode(kPluginNodeNameManip, kPluginNodeNameManipId, positionOnCurveManip.nodeCreator, positionOnCurveManip.nodeInitializer, OpenMayaMPx.MPxNode.kManipContainer)
+
+        # register AE template
+        pm.callbacks(addCallback=loadAETemplateCallback, hook='AETemplateCustomContent', owner=kPluginNodeName)
+
+        # register manip
+        pluginFn.registerNode(kPluginNodeNameManip, kPluginNodeNameManipId, positionOnCurveManip.nodeCreator,
+                              positionOnCurveManip.nodeInitializer, OpenMayaMPx.MPxNode.kManipContainer)
+
+        # register node
+        pluginFn.registerNode(kPluginNodeName, kPluginNodeId, positionOnCurve.creator, positionOnCurve.initialize)
 
     except:
         sys.stderr.write('Failed to register node: ' + kPluginNodeName)
