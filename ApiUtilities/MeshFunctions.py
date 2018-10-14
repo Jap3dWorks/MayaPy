@@ -234,7 +234,7 @@ def createMesh(pointArray=((0, 0, -2.5), (5, 0, -2.5), (8, 0, 0), (5, 0, 2.5), (
     shGrpPlug = shadingGrp_MFn.findPlug('dagSetMembers', True)
     shGrpPlugNumElements = shGrpPlug.evaluateNumElements()
     logger.debug('createMesh: %s num elements: %s' % (shGrpPlug.name(), shGrpPlugNumElements))
-    # get the free element of the attr array
+    # documentation: get the free element of the attr array
 
     existingIndices = set(shGrpPlug.getExistingArrayAttributeIndices())
     rangeExistingIndices = set(range(len(existingIndices) + 1))
