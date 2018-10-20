@@ -1,5 +1,6 @@
 from cmt.test import TestCase
-from Nodes import positionOnCurve
+from positionOnCurve import positionOnCurve
+
 reload(positionOnCurve)
 from maya import cmds
 
