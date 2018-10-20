@@ -1,3 +1,10 @@
+"""
+Free plug-in
+Copy positionOnCurve in your documents/maya/version/plug-ins folder
+load plug-in
+select a curve then an transform node
+run command: positionOnCurveCommand
+"""
 import sys
 
 import maya.OpenMaya as OpenMaya
@@ -19,10 +26,9 @@ logger.setLevel(logging.INFO)
 # documentation: https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__files_GUID_C5A68952_EB7D_41CC_ABF5_CC4C63293EED_htm
 # documentation: https://stackoverflow.com/questions/50365958/maya-mpxnode-multiple-outputs
 
-# TODO: Study object creation and new plugs inside Node, this works with callbacks
-# TODO: add twist
+# Todo: more functionalities with manips
 
-kPluginVersion = "0.0"
+kPluginVersion = "0.3"
 kPluginNodeName = 'positionOnCurve'
 # identifier of the node
 kPluginNodeId = OpenMaya.MTypeId(0x87059)
@@ -32,7 +38,8 @@ kPluginNodeNameManipId = OpenMaya.MTypeId(0x87060)
 kPluginNodeNameCommand = 'positionOnCurveCommand'
 kPluginNodeClassify = 'utility/general'  # not in use
 
-# we use the maya locator proxy as base class for our node
+# we use the maya locator proxy as base class for our node.
+# So we can look our node in the outliner
 class positionOnCurve(OpenMayaMPx.MPxLocatorNode):
     # define inputs
     inputCurveAttribute = OpenMaya.MObject()
