@@ -9,7 +9,7 @@ import maya.cmds as cmds
 # By inheriting from MPxDeformerNode, your class will have access to the input and output mesh attributes,
 # available via OpenMayaMPx.cvar.MPxGeometryFilter_inputGeom and
 # OpenMayaMPx.cvar.MPxGeometryFilter_outputGeom respectively.
-# https://knowledge.autodesk.com/search-result/caas/CloudHelp/cloudhelp/2016/ENU/Maya-SDK/files/GUID-10CE99A6-2C32-49E1-85ED-2E2F6782CF23-htm.html
+# Documentation: bounding Box deformer: https://knowledge.autodesk.com/search-result/caas/CloudHelp/cloudhelp/2016/ENU/Maya-SDK/files/GUID-10CE99A6-2C32-49E1-85ED-2E2F6782CF23-htm.html
 
 kApiVersion = cmds.about(apiVersion=True)
 if kApiVersion < 201600:
@@ -111,6 +111,7 @@ class PushDeformer(ompx.MPxDeformerNode):
 
 
     def getInputMesh(self, data, geomIdx):
+        # Explanation: get the input mesh, so we can modify
         # we need to check the input of the node
         inputHandle = data.outputArrayValue(inputAttr)
         # inputHandle is MArrayDataHandle

@@ -187,7 +187,7 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
 
     def assignShadingGroup(self, fnDagNode):
         fnSet = self.getShadingGroup()
-
+        # review: assign shading groups
         if fnSet is not None:
             # Easiest, cleanest way seems to be calling mel.
             # sets command handles everithing, even nested instanced dag paths
@@ -252,7 +252,7 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
             return OpenMaya.kUnknownParameter  # review: learn about this
 
         # Plugs
-        outputTranslationPlug = OpenMaya.MPlug(self.thisMObject(), instanceAlongCurveLocator.outputTranslationAttr.compound)
+        outputTranslationPlug = OpenMaya.MPlug(self.thisMObject(), instanceAlongCurveLocator.outputTranslationAttr.compound)  # in this case compound is the array
         outputRotationPlug = OpenMaya.MPlug(self.thisMObject(), instanceAlongCurveLocator.outputRotationAttr.compound)
         outputScalePlug = OpenMaya.MPlug(self.thisMObject(), instanceAlongCurveLocator.outputRotationAttr.compound)
 
@@ -355,7 +355,7 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
     def attrChangeCallback(self, msg, plug, otherPlug, clientData):
         # explanation: &: bitwise and. pe: 0100 & 1011 = 0000 (bits multiplication)
         incomingDirection = (OpenMaya.MNodeMessage.kIncomingDirection & msg) == OpenMaya.MNodeMessage.kIncomingDirection
-        attributeSet = (OpenMaya.MNodeMessage.kAttributeSet % msg) == OpenMaya.MNodeMessage.kAttributeSet
+        attributeSet = (OpenMaya.MNodeMessage.kAttributeSet & msg) == OpenMaya.MNodeMessage.kAttributeSet
         isCorrectAttribute = (plug.attribute() == instanceAlongCurveLocator.instanceCountAttr)
         isCorrectAttribute = isCorrectAttribute or (plug.attribute() == instanceAlongCurveLocator.instancingModeAttr)
         isCorrectAttribute = isCorrectAttribute or (plug.attribute() == instanceAlongCurveLocator.instanceLengthAttr)
@@ -456,6 +456,7 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
 
     def updateInstancePosition(self, curveFn, dataBlock, count, distOffset, curveStart, curveEnd, effectiveCurveLength, lengthIncrement, inputTransformPlug, inputTransformFn, axisHandlesSorted):
         # common data
+        # Explanation: datablock outputArrayValue
         translateArrayHandle = dataBlock.outputArrayValue(instanceAlongCurveLocator.outputtranslationAttr.compound)
         curveLength = curveFn.length()
         maxParam = curveFn.findParamFromLength(curveLength)
@@ -569,6 +570,7 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
             # local offset
             point += basisRight * localTranslationOffset.x + basisUp * localTranslationOffset.y + basisForward * localTranslationOffset.z
 
+            # Explanation: setting array attributes elements
             translateArrayHandle.jumpToArrayElement(i)
             translateHandle = translateArrayHandle.outputValue()
             translateHandle.set3Double(point.x, point.y, point.z)
@@ -942,7 +944,7 @@ class instanceAlongCurveLocator(OpenMayaMPx.MPxLocatorNode):
         cmpAttr.addChild(curveAxisHandleAttr.parameter)
         cmpAttr.addChild(curveAxisHandleAttr.angle)
         cmpAttr.setWritable(True)
-        cmpAttr.setArray(True)
+        cmpAttr.setArray(True)  # explanation: setArray attr
         cmpAttr.setUsesArrayDataBuilder(True)
 
         cls.addAttribute(curveAxisHandleAttr.compound)

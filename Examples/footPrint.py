@@ -136,9 +136,9 @@ class footPrint(OpenMayaUI.MPxLocatorNode):
             else:
                 view.setDrawColor(13, OpenMayaUI.M3dView.kDormantColors)
 
-            """
-            ### another method to colorize ###
-            # enable blend mode, to enable transparency
+
+            # Explanation: ## another method to colorize ##
+            """ # enable blend mode, to enable transparency
             glFT.glEnable(OpenMayaRender.MGL_BLEND)
             # defined blend function
             glFT.glBlendFunc(OpenMayaRender.MGL_SRC_ALPHA, OpenMayaRender.MGL_ONE_MINUS_SRC_ALPHA)
