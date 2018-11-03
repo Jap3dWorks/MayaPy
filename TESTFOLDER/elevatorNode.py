@@ -27,8 +27,10 @@ logger.setLevel(logging.INFO)
 # documentation: https://help.autodesk.com/view/MAYAUL/2018/ENU/?guid=__files_GUID_C5A68952_EB7D_41CC_ABF5_CC4C63293EED_htm
 # documentation: https://stackoverflow.com/questions/50365958/maya-mpxnode-multiple-outputs
 
-# Todo: more functionalities with manips
-# TODO: add files count?
+# Todo: more functionalities with manips - low
+# TODO: add files count? nop - low
+# todo: add file separator - med
+# todo: 4 sticks by floor - high
 
 kPluginVersion = "0.0"
 kPluginNodeName = 'elevatorLocator'
@@ -56,6 +58,7 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
     # value attr
     numFloorAttribute = OpenMaya.MObject()
     lengthStickAttribute = OpenMaya.MObject()
+    distanceStickAttribute = OpenMaya.MObject()
 
     # define outputs
     outputMatrixTransformAttribute = OpenMaya.MObject()
@@ -100,11 +103,19 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
 
         # length stick
         node.lengthStickAttribute = mfnAttr.create('Length', 'Length', OpenMaya.MFnNumericData.kDouble, 10.0)
-        mfnAttr.setMin(3.0)
+        mfnAttr.setMin(1.0)
         mfnAttr.setSoftMax(500.0)
         mfnAttr.setChannelBox(False)
-        mfnAttr.setConnectable(False)
+        mfnAttr.setConnectable(True)  # review: original value False
         node.addAttribute(node.lengthStickAttribute)
+
+        # distance stick
+        node.distanceStickAttribute = mfnAttr.create('Distance', 'Distance', OpenMaya.MFnNumericData.kDouble, 5)
+        mfnAttr.setMin(1.0)
+        mfnAttr.setSoftMax(500.0)
+        mfnAttr.setChannelBox(False)
+        mfnAttr.setConnectable(True)  # review: original value False
+        node.addAttribute(node.distanceStickAttribute)
 
         # output
         node.outputMatrixTransformAttribute = matrixAttrFn.create('outTransform', 'outTransform', OpenMaya.MFnNumericData.kDouble)
@@ -124,6 +135,7 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
         node.attributeAffects(node.inputMatrix02Attribute, node.outputMatrixTransformAttribute)
         node.attributeAffects(node.numFloorAttribute, node.outputMatrixTransformAttribute)
         node.attributeAffects(node.lengthStickAttribute, node.outputMatrixTransformAttribute)
+        node.attributeAffects(node.distanceStickAttribute, node.outputMatrixTransformAttribute)
 
 
         return True
@@ -182,7 +194,7 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
 
         logger.debug('--Callback.updateInstanceConnections--')
         expectedInstancesCountPlug = OpenMaya.MPlug(self.thisMObject(), self.numFloorAttribute)
-        expectedInstancesCount = expectedInstancesCountPlug.asInt()
+        expectedInstancesCount = expectedInstancesCountPlug.asInt() * 4  # four instances by floor
         logger.debug('expected Instances Count : %s' % expectedInstancesCount)
 
         # plugs
@@ -196,7 +208,7 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
             inputTransformPlug = OpenMaya.MPlug(self.thisMObject(), self.inputObjectMsgAttribute)
             connections = OpenMaya.MPlugArray()
             inputTransformPlug.connectedTo(connections, True, False)
-            # fixme: possible empty array, try or check length
+
             if not connections.length():
                 return
 
@@ -325,6 +337,9 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
             # stick length
             lengthStickHandle = pDataBlock.inputValue(elevatorNode.lengthStickAttribute)
             lengthStick = lengthStickHandle.asDouble()
+            # stick distance
+            distanceStickHandle = pDataBlock.inputValue(elevatorNode.distanceStickAttribute)
+            distanceStick = distanceStickHandle.asDouble()
 
             # inputMatrixTransforms
             inputMatrix01Handle = pDataBlock.inputValue(elevatorNode.inputMatrix01Attribute)
@@ -344,6 +359,9 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
 
             floorVector = distanceVector / numFloor
 
+            if floorVector.length() > lengthStick:
+                return OpenMaya.kUnknownParameter
+
             # calculate angle, length of stick object must touch the upper floor
             # we can use pitagoras theorem
             # floorVector -> C
@@ -358,41 +376,78 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
             # calculate vectors
             xVector = OpenMaya.MVector(inputMatrix01Attribute(0,0), inputMatrix01Attribute(0,1), inputMatrix01Attribute(0,2))
             zVector = xVector ^ floorVector
-            # todo: maybe recalculate cross product X
+            xVector = floorVector ^ zVector  # todo: maybe recalculate cross product X
 
-            # rotateVectors
-            quaternion = OpenMaya.MQuaternion(angle, zVector)
-            xVector = xVector.rotateBy(quaternion)
-            yVector = OpenMaya.MVector(floorVector)
+            # rotateVectors base, zVector same
+            quaternionBase = OpenMaya.MQuaternion(angle, zVector)
+            xVectorBase = xVector.rotateBy(quaternionBase)
+            yVectorBase = OpenMaya.MVector(floorVector).rotateBy(quaternionBase)
+            # rotateVectorsUpper
+            quaternionUpper = OpenMaya.MQuaternion(-angle, zVector)
+            xVectorUpper = xVector.rotateBy(quaternionUpper)
+            yVectorUpper = OpenMaya.MVector(floorVector).rotateBy(quaternionUpper)
 
-            # Normaliza lengths
-            xVector.normalize()
+            # Normalize lengths
+            xVectorBase.normalize()
+            yVectorBase.normalize()
             zVector.normalize()
-            yVector.normalize()
+
+            xVectorUpper.normalize()
+            yVectorUpper.normalize()
 
 
             for i in range(numFloor):
+                # 4 sticks by floor
+                logger.debug('Per floor value: %s,%s,%s' % (
+                floorVector.x * (i + 1), floorVector.y * (i + 1), floorVector.z * (i + 1)))
 
-                util = OpenMaya.MScriptUtil()
-                mFloatMatrix = OpenMaya.MFloatMatrix()
-                logger.debug('Per floor value: %s,%s,%s' % (floorVector.x * (i + 1), floorVector.y*(i + 1), floorVector.z*(i + 1)))
+                for n in range(4):
+                    util = OpenMaya.MScriptUtil()
+                    mFloatMatrix = OpenMaya.MFloatMatrix()
 
-                util.createFloatMatrixFromList([xVector.x,xVector.y,xVector.z,0,
-                                                yVector.x,yVector.y,yVector.z,0,
-                                                zVector.x,zVector.y,zVector.z,0,
-                                                floorVector.x * i + inputMatrix01Attribute(3, 0),
-                                                floorVector.y * i + inputMatrix01Attribute(3, 1),
-                                                floorVector.z * i + inputMatrix01Attribute(3, 2), 1], mFloatMatrix)
+                    if n == 0:
+                        util.createFloatMatrixFromList([xVectorBase.x, xVectorBase.y, xVectorBase.z, 0,
+                                                        yVectorBase.x, yVectorBase.y, yVectorBase.z, 0,
+                                                        zVector.x, zVector.y, zVector.z, 0,
+                                                        floorVector.x * i + inputMatrix01Attribute(3, 0),
+                                                        floorVector.y * i + inputMatrix01Attribute(3, 1),
+                                                        floorVector.z * i + inputMatrix01Attribute(3, 2)+distanceStick, 1],
+                                                       mFloatMatrix)
+                    elif n == 1:
+                        util.createFloatMatrixFromList([xVectorUpper.x, xVectorUpper.y, xVectorUpper.z, 0,
+                                                        yVectorUpper.x, yVectorUpper.y, yVectorUpper.z, 0,
+                                                        zVector.x, zVector.y, zVector.z, 0,
+                                                        floorVector.x * (i+1) + inputMatrix01Attribute(3, 0),
+                                                        floorVector.y * (i+1) + inputMatrix01Attribute(3, 1),
+                                                        floorVector.z * (i+1) + inputMatrix01Attribute(3, 2) + distanceStick, 1],
+                                                       mFloatMatrix)
+                    elif n == 2:
+                        util.createFloatMatrixFromList([xVectorBase.x, xVectorBase.y, xVectorBase.z, 0,
+                                                        yVectorBase.x, yVectorBase.y, yVectorBase.z, 0,
+                                                        zVector.x, zVector.y, zVector.z, 0,
+                                                        floorVector.x * i + inputMatrix01Attribute(3, 0),
+                                                        floorVector.y * i + inputMatrix01Attribute(3, 1),
+                                                        floorVector.z * i + inputMatrix01Attribute(3, 2) - distanceStick, 1],
+                                                       mFloatMatrix)
+                    elif n == 3:
+                        util.createFloatMatrixFromList([xVectorUpper.x, xVectorUpper.y, xVectorUpper.z, 0,
+                                                        yVectorUpper.x, yVectorUpper.y, yVectorUpper.z, 0,
+                                                        zVector.x, zVector.y, zVector.z, 0,
+                                                        floorVector.x * (i + 1) + inputMatrix01Attribute(3, 0),
+                                                        floorVector.y * (i + 1) + inputMatrix01Attribute(3, 1),
+                                                        floorVector.z * (i + 1) + inputMatrix01Attribute(3, 2) - distanceStick, 1],
+                                                       mFloatMatrix)
 
-                try:
-                    outputMatrixTransformHandle.jumpToArrayElement(i)
-                    outputIndexHandle = outputMatrixTransformHandle.outputValue()
 
-                    # set output
-                    outputIndexHandle.setMFloatMatrix(mFloatMatrix)
-                    outputIndexHandle.setClean()
-                except:
-                    return OpenMaya.kUnknownParameter
+                    try:
+                        outputMatrixTransformHandle.jumpToArrayElement(i*4 + n)  # attr output index *4
+                        outputIndexHandle = outputMatrixTransformHandle.outputValue()
+
+                        # set output
+                        outputIndexHandle.setMFloatMatrix(mFloatMatrix)
+                        outputIndexHandle.setClean()
+                    except:
+                        return OpenMaya.kUnknownParameter
 
             logger.debug('__End COMPUTE__')
             outputMatrixTransformHandle.setAllClean()
