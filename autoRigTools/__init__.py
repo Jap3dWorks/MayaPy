@@ -1,0 +1,1 @@
+from autoRigTools import autoRig
