@@ -162,7 +162,7 @@ class autoRig(object):
             if n == 0:
                 # parent first target transform, to hips controller
                 spineIKControllerList[0].addChild(ObjectUpVector)
-            if n > 0:
+            else:
                 aimConstraint = pm.aimConstraint(jointDriverList[-1], jointDriverList[-2], aimVector=(1,0,0), upVector=(0,1,0), worldUpType='object', worldUpObject=ObjectUpVectorList[-2])
 
         # parent last target transform, to chest
@@ -501,7 +501,3 @@ def createController(name, controllerType = 'circle', s=1.0):
     logger.debug('controller %s' % controller)
 
     return controller
-    
-    
-if __name__ == '__main__':
-    autoSpine()
