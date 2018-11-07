@@ -410,7 +410,7 @@ class autoRig(object):
         for i in range(len(neckHeadJoints[:-1])):
             pm.parentConstraint(jointDriverList[i], neckHeadJoints[i], maintainOffset=True, name='%s_parentConstraint' % str(joint))
 
-        # connect by pointConstraint objectUpVector to first and last upVectors
+        # connect by pointConstraint objectUpVector from first to last upVectors
         totalDistance = ObjectUpVectorList[-1].getTranslation('world') - ObjectUpVectorList[0].getTranslation('world')
         totalDistance = totalDistance.length()
         for n, upVectorObject in enumerate(ObjectUpVectorList):
@@ -467,22 +467,17 @@ class autoRig(object):
             plusMinusAverageToJoint.output1D.connect(joint.scaleZ)
 
 
-    def createController(self, name, controllerType='circle', s=1.0, colorIndex=4):
+    def createController(self, name, controllerType, s=1.0, colorIndex=4):
         """
         create circle or square controllers
         Args:
         name: name of controller
         controllerType(str): circle, square
         """
-        controller = pm.PyNode(
-            ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s))
+        controller = pm.PyNode(ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s, colorIndex))
         controller.rename(name)
-        controllerShape = controller.getShape()
-        controllerShape.attr('overrideEnabled').set(True)
-        controllerShape.attr('overrideColor').set(colorIndex)
 
         logger.debug('controller %s' % controller)
-
         return controller
 
 
