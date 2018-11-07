@@ -40,7 +40,7 @@ class autoRig(object):
         """
             Auto create a character spine
         """
-
+        # TODO: type joint pm.ls
         # detect spine joints and their positions
         spineJoints = [i for i in pm.ls() if re.match('^%s.*((hips)|(spine)|(chest)).*joint$' % self.chName, str(i))]
         positions = [i.getTranslation(space='world') for i in spineJoints]
