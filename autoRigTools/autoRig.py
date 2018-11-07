@@ -1,19 +1,21 @@
 import pymel.core as pm
 import re
 from maya import OpenMaya
+from autoRigTools import ctrSaveLoadToJson
 
 import logging
 logging.basicConfig()
-logger = logging.getLogger('autoSpine:')
+logger = logging.getLogger('autoRig:')
 logger.setLevel(logging.DEBUG)
 
 class autoRig(object):
-    def __init__(self, chName='akona'):
+    def __init__(self, chName='akona', path='D:\_docs\_Animum\_leccion3\python'):
         """
         autoRig class tools
         """
         # TODO: node 'unknown' messages attributes to store connections?
         self.chName = chName
+        self.path = path
         self.joints = {}  # store joints
         self.ikControllers = {}
 
@@ -76,17 +78,22 @@ class autoRig(object):
             spineDrvList.append(spineDriver)
 
             # create controller and parent locator
-            spineController = createController('%s_spine_IK_%s_ctr' % (self.chName, n+1), 'circle')
+            ctrType = 'hips' if n == 0 else 'chest' if n == spineCurve.numCVs()-1 else 'spine%s' % n
+            spineController = self.createController('%s_spine_IK_%s_ctr' % (self.chName, n+1), '%sIk' % ctrType,1, 17)
             logger.debug('spine controller: %s' % spineController)
             spineController.setTranslation(i)
             spineController.addChild(spineDriver)
             spineIKControllerList.append(spineController)
 
+            # spine type controllers only trasnlate
+            if 'spine' in ctrType:
+                lockAndHideAttr(spineController, False, True, True)
+
             # create FK controllers
             if n < 3:
                 # first fk controller bigger
                 fkCtrSize = 1.5 if len(spineFKControllerList) == 0 else 1
-                spineFKController = createController('%s_spine_FK_%s_ctr' % (self.chName, n + 1), 'square', fkCtrSize)
+                spineFKController = self.createController('%s_spine_FK_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
                 spineFKController.setTranslation(i)
                 spineFKControllerList.append(spineFKController)
 
@@ -114,9 +121,7 @@ class autoRig(object):
 
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
         for neckHeadIKCtr in spineFKControllerList[1:]:
-            neckHeadIKCtr.translate.lock()
-            for axis in ('X','Y','Z'):
-                pm.setAttr('%s.translate%s' % (str(neckHeadIKCtr), axis), channelBox=False, keyable=False)
+            lockAndHideAttr(neckHeadIKCtr, True, False, False)
 
         # create points on curve that will drive the joints
         jointDriverList = []
@@ -278,7 +283,8 @@ class autoRig(object):
             # no create controller two first drivers and the penultimate
             if n > 1 and not n == neckHeadCurve.numCVs()-1:
                 # create controller and parent drivers to controllers
-                neckHeadIKCtr = createController('%s_neckHead_IK_%s_ctr' % (self.chName,len(neckHeadIKCtrList)+1),'circle',.5)
+                ctrType = 'neck' if not len(neckHeadIKCtrList) else 'head'
+                neckHeadIKCtr = self.createController('%s_%s_IK_%s_ctr' % (self.chName,ctrType,len(neckHeadIKCtrList)+1), '%sIk' % ctrType, 1, 17)
                 logger.debug('neckHead controller: %s' % neckHeadIKCtr)
 
                 # second controller more smooth deform up the first
@@ -289,7 +295,7 @@ class autoRig(object):
 
                 # create FK controllers, only with the first ik controller
                 if len(neckHeadIKCtrList) == 1:
-                    neckHeadFKCtr = createController('%s_neckHead_FK_%s_ctr' % (self.chName,len(neckHeadFKCtrList)+1),'square',.5)
+                    neckHeadFKCtr = self.createController('%s_neckHead_FK_%s_ctr' % (self.chName,len(neckHeadFKCtrList)+1), 'hipsFk',.5,4)
                     neckHeadFKCtr.setTranslation(i)
                     neckHeadFKCtrList.append(neckHeadFKCtr)
                     # Fk hierarchy, if we have more fk controllers. not the case
@@ -310,10 +316,10 @@ class autoRig(object):
         neckHeadFKCtrRoots = createRoots(*neckHeadFKCtrList)
         neckHeadIKCtrRoots = createRoots(*neckHeadIKCtrList)
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
-        for neckHeadIKCtr in neckHeadFKCtrList:
-            neckHeadIKCtr.translate.lock()
-            for axis in ('X','Y','Z'):
-                pm.setAttr('%s.translate%s' % (str(neckHeadIKCtr), axis), channelBox=False, keyable=False)
+        for neckHeadFKCtr in neckHeadFKCtrList:
+            lockAndHideAttr(neckHeadFKCtr, True, False, False)
+        # lock and hide neck attr, it's here because we have only one
+        lockAndHideAttr(neckHeadIKCtrList[0], False, True, True)
 
         # head orient auto
         # head orient neck grp
@@ -372,8 +378,8 @@ class autoRig(object):
                 param = 1.0
             # create empty grp and connect nodes
             # TODO: no locator, empty grp
-            #jointDriverGrp = pm.group(empty=True, name='%s_target' % str(joint))
-            jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
+            jointDriverGrp = pm.group(empty=True, name='%s_target' % str(joint))
+            #jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
             pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%sneckHead%s_positionOnCurveInfo' % (self.chName, n + 1))
             neckHeadCurve.worldSpace[0].connect(pointOnCurveInfo.inputCurve)
             pointOnCurveInfo.parameter.set(param)
@@ -461,6 +467,25 @@ class autoRig(object):
             plusMinusAverageToJoint.output1D.connect(joint.scaleZ)
 
 
+    def createController(self, name, controllerType='circle', s=1.0, colorIndex=4):
+        """
+        create circle or square controllers
+        Args:
+        name: name of controller
+        controllerType(str): circle, square
+        """
+        controller = pm.PyNode(
+            ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s))
+        controller.rename(name)
+        controllerShape = controller.getShape()
+        controllerShape.attr('overrideEnabled').set(True)
+        controllerShape.attr('overrideColor').set(colorIndex)
+
+        logger.debug('controller %s' % controller)
+
+        return controller
+
+
 #######
 #utils#
 #######
@@ -478,26 +503,17 @@ def createRoots(*args):
         rootGrp.addChild(arg)
         roots.append(rootGrp)
     return roots
-    
-def createController(name, controllerType = 'circle', s=1.0):
-    """
-    create circle or square controllers
-    Args:
-    name: name of controller
-    controllerType(str): circle, square
-    """
-    if controllerType == 'circle':
-        controller = pm.circle(ch=False, name=name, nr=(0,1,0), r=15 * s)[0]
-        controllerShape = controller.getShape()
-        controllerShape.attr('overrideEnabled').set(True)
-        controllerShape.attr('overrideColor').set(17)
-        
-    elif controllerType == 'square':
-        controller = pm.curve(ep=((-15*s,0*s,15*s), (-15*s,0*s,-15*s), (15*s,0*s,-15*s), (15*s,0*s,15*s), (-15*s,0*s,15*s)), name=name, d=1)
-        controllerShape = controller.getShape()
-        controllerShape.attr('overrideEnabled').set(True)
-        controllerShape.attr('overrideColor').set(4)
 
-    logger.debug('controller %s' % controller)
-
-    return controller
+def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
+    if translate:
+        obj.translate.lock()
+        for axis in ('X', 'Y', 'Z'):
+            pm.setAttr('%s.translate%s' % (str(obj), axis), channelBox=False, keyable=False)
+    if rotate:
+        obj.rotate.lock()
+        for axis in ('X', 'Y', 'Z'):
+            pm.setAttr('%s.rotate%s' % (str(obj), axis), channelBox=False, keyable=False)
+    if scale:
+        obj.scale.lock()
+        for axis in ('X', 'Y', 'Z'):
+            pm.setAttr('%s.scale%s' % (str(obj), axis), channelBox=False, keyable=False)
