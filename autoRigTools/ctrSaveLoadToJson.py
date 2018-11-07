@@ -77,13 +77,13 @@ def ctrSaveJson(typeController, name, path):
 
 def ctrLoadJson(typeController, name, path, SFactor=1, ColorIndex = 4):
     """
-    TODO: color attributes here too
     Load saved controllers from json
     Args:
         typeController: controller name
         name: file name
         path: path of file
         SFactor: scale factor
+        ColorIndex: color index
     Returns: fullPathName of createdController
     """
     controllerFile = ('%s/%s.json' % (path, name))
