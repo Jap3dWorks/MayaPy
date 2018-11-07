@@ -48,10 +48,13 @@ def ctrSaveJson(typeController, name, path):
     
     # save controller to dictionary
     controllerDict[typeController] = controllerAttr
-    
+
     # save to json
     with open(controllerFile, 'w') as f:
         json.dump(controllerDict, f, indent=4)
+
+    logger.info('%s %s controller saved at: %s' % (name, typeController, controllerFile))
+
 
 def ctrLoadJson(typeController, name, path, SFactor=1):
     """
