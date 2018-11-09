@@ -58,10 +58,9 @@ class autoRig(object):
         #rebuildCurve
         pm.rebuildCurve(spineCurve, s=2, rpo=True, ch=False, rt=0, d=3, kt=0, kr=0)
 
-        # review: manual adjust
+        # review: test autoMethod
         # TODO: search an automation, use  distanceToCurve
-        spineCurve.setCV(1, spineCurve.getCV(1)+(0, 0, 0.574351))
-        spineCurve.setCV(3, spineCurve.getCV(3)+(0, 0, -0.646978))
+        adjustCurveToPoints(spineJoints, spineCurve, 16, 0.01)
 
         # create locators and connect to curve CV's
         spineDrvList = []
@@ -145,7 +144,6 @@ class autoRig(object):
             param = util.getDouble(ptr)
 
             # create empty grp and connect nodes
-            # TODO: no locator, empty grp
             jointDriverGrp = pm.group(empty=True, name='%s_target' % str(joint))
             # jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
             pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%s_spine_joint_%s_positionOnCurveInfo' % (self.chName, n+1))
@@ -244,7 +242,7 @@ class autoRig(object):
         neckHeadJoints = [i for i in pm.ls() if re.match('^%s.*(neck|head).*joint$' % self.chName, str(i))]
         logger.debug('Neck head joints: %s' % neckHeadJoints)
         positions = [i.getTranslation(space='world') for i in neckHeadJoints[:-1]]
-        positions.append((positions[-1][0],positions[-1][1]+3,positions[-1][2]))
+        #  positions.append((positions[-1][0],positions[-1][1]+3,positions[-1][2]))  extra point for head
 
         neckHeadCurveTransform = pm.curve(ep=positions, name='%s_spine_1_crv' % self.chName)
         # parent to noXform grp
@@ -258,9 +256,9 @@ class autoRig(object):
         # rebuildCurve
         pm.rebuildCurve(neckHeadCurve, s=2, rpo=True, ch=False, rt=0, d=3, kt=0, kr=0)
 
-        # review: manual adjust
+        # review: testAuto
         # TODO: search an automation, use  distanceToCurve
-        neckHeadCurve.setCV(1, neckHeadCurve.getCV(1) + (0, 0, 0.466137))
+        adjustCurveToPoints(neckHeadJoints[:-1], neckHeadCurve, 16, 0.01)
 
         # create locators and connect to curve CV's
         neckHeadDrvList = []
@@ -271,6 +269,7 @@ class autoRig(object):
             # TODO: nice ik controllers shape
             # create drivers to manipulate the curve
             neckHeadDriver = pm.group(name='%s_neckHeadCurve_%s_drv' % (self.chName, n+1), empty=True)
+            # neckHeadDriver = pm.spaceLocator(name='%s_neckHeadCurve_%s_drv' % (self.chName, n+1))
             neckHeadDriver.setTranslation(i)
             # use the worldMatrix
             decomposeMatrix = pm.createNode('decomposeMatrix', name='%s_neckHead_%s_decomposeMatrix' % (self.chName, n+1))
@@ -281,14 +280,15 @@ class autoRig(object):
             neckHeadDrvList.append(neckHeadDriver)  # add to drv List
 
             # no create controller two first drivers and the penultimate
-            if n > 1 and not n == neckHeadCurve.numCVs()-1:
+            if n > 1 and not n == neckHeadCurve.numCVs()-2:
                 # create controller and parent drivers to controllers
                 ctrType = 'neck' if not len(neckHeadIKCtrList) else 'head'
                 neckHeadIKCtr = self.createController('%s_%s_IK_%s_ctr' % (self.chName,ctrType,len(neckHeadIKCtrList)+1), '%sIk' % ctrType, 1, 17)
                 logger.debug('neckHead controller: %s' % neckHeadIKCtr)
 
                 # second controller more smooth deform up the first
-                ikCtrPos = i if len(neckHeadIKCtrList) == 0 else (neckHeadIKCtrList[-1].getTranslation('world')[0],i[1],neckHeadIKCtrList[-1].getTranslation('world')[2])
+                ikCtrPos = i if len(neckHeadIKCtrList) == 0 else (neckHeadIKCtrList[-1].getTranslation('world')[0], i[1], neckHeadIKCtrList[-1].getTranslation('world')[2])
+
                 neckHeadIKCtr.setTranslation(ikCtrPos)
                 neckHeadIKCtr.addChild(neckHeadDriver)
                 neckHeadIKCtrList.append(neckHeadIKCtr)  # add to ik controller List
@@ -305,7 +305,7 @@ class autoRig(object):
 
         # configure ctr hierarchy
         neckHeadFKCtrList[-1].addChild(neckHeadIKCtrList[-1])
-        neckHeadIKCtrList[-1].addChild(neckHeadDrvList[-1])  # add the penultimate driver too
+        neckHeadIKCtrList[-1].addChild(neckHeadDrvList[-2])  # add the penultimate driver too
         self.ikControllers['spine'][-1].addChild(neckHeadIKCtrList[0])  # ik controller child of last spine controller
         neckHeadIKCtrList[0].addChild(neckHeadDrvList[1])
         neckHeadIKCtrList[-1].rename('%s_head_IK_1_ctr' % self.chName)
@@ -356,7 +356,7 @@ class autoRig(object):
         # create points on curve that will drive the joints
         jointDriverList = []
         ObjectUpVectorList = []
-        for n, joint in enumerate(neckHeadJoints):
+        for n, joint in enumerate(neckHeadJoints[:-1]):
             # jointPosition
             jointPos = joint.getTranslation('world')
 
@@ -377,9 +377,8 @@ class autoRig(object):
             except:
                 param = 1.0
             # create empty grp and connect nodes
-            # TODO: no locator, empty grp
             jointDriverGrp = pm.group(empty=True, name='%s_target' % str(joint))
-            #jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
+            # jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
             pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%sneckHead%s_positionOnCurveInfo' % (self.chName, n + 1))
             neckHeadCurve.worldSpace[0].connect(pointOnCurveInfo.inputCurve)
             pointOnCurveInfo.parameter.set(param)
@@ -389,8 +388,8 @@ class autoRig(object):
             jointDriverList.append(jointDriverGrp)
 
             # up vector transforms, useful for later aimContraint
-            ObjectUpVector = pm.group(empty=True, name='%s_upVector' % str(joint))
-            # ObjectUpVector = pm.spaceLocator(name='%s_upVector' % str(joint))
+            # ObjectUpVector = pm.group(empty=True, name='%s_upVector' % str(joint))
+            ObjectUpVector = pm.spaceLocator(name='%s_upVector' % str(joint))
             ObjectUpVector.setTranslation(jointDriverGrp.getTranslation() + pm.datatypes.Vector(0, 0, -20), 'world')
             noXformNeckHeadGrp.addChild(ObjectUpVector)
             ObjectUpVectorList.append(ObjectUpVector)
@@ -405,10 +404,6 @@ class autoRig(object):
 
         # parent last target transform, to chest
         neckHeadIKCtrList[-1].addChild(ObjectUpVectorList[-1])
-
-        # review: create parent constraints, once drivers have been created, if not, all flip
-        for i in range(len(neckHeadJoints[:-1])):
-            pm.parentConstraint(jointDriverList[i], neckHeadJoints[i], maintainOffset=True, name='%s_parentConstraint' % str(joint))
 
         # connect by pointConstraint objectUpVector from first to last upVectors
         totalDistance = ObjectUpVectorList[-1].getTranslation('world') - ObjectUpVectorList[0].getTranslation('world')
@@ -443,6 +438,17 @@ class autoRig(object):
             # TODO: rename all this
             if re.match('.*tip.*', str(joint)):
                 continue
+
+            # review: create parent constraints, once drivers have been created, if not, all flip
+            elif re.match('.*head.*', str(joint)):
+                # head joint, with point to driver, and orient to controller
+                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False, name='%s_pointConstraint' % str(joint))
+                pm.orientConstraint(neckHeadIKCtrList[-1], joint, maintainOffset=True, name='%s_orientConstraint' % str(joint))
+
+            else:
+                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_parentConstraint' % str(joint))
+
+
             multiplyDivide = pm.createNode('multiplyDivide')
             multiplyDivide.operation.set(2)
             multiplyDivide.input1X.set(neckHeadCurveLength)
@@ -469,10 +475,9 @@ class autoRig(object):
 
     def createController(self, name, controllerType, s=1.0, colorIndex=4):
         """
-        create circle or square controllers
         Args:
         name: name of controller
-        controllerType(str): circle, square
+        controllerType(str): from json controller types
         """
         controller = pm.PyNode(ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s, colorIndex))
         controller.rename(name)
@@ -512,3 +517,50 @@ def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
         obj.scale.lock()
         for axis in ('X', 'Y', 'Z'):
             pm.setAttr('%s.scale%s' % (str(obj), axis), channelBox=False, keyable=False)
+
+
+def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
+    selection = OpenMaya.MSelectionList()
+    selection.add(str(curve))
+    dagpath = OpenMaya.MDagPath()
+    selection.getDagPath(0, dagpath)
+
+    mfnNurbsCurve = OpenMaya.MFnNurbsCurve(dagpath)
+
+    for i in range(iterations):
+        for joint in joints:
+            jointPos = joint.getTranslation('world')
+            jointPosArray = OpenMaya.MFloatArray()
+            util = OpenMaya.MScriptUtil()
+            util.createFloatArrayFromList(jointPos, jointPosArray)
+
+            mPoint = OpenMaya.MPoint(jointPosArray[0], jointPosArray[1], jointPosArray[2], 1)
+            closestPointCurve = mfnNurbsCurve.closestPoint(mPoint, None, 1, OpenMaya.MSpace.kWorld)
+
+            mvector = OpenMaya.MVector(mPoint - closestPointCurve)
+
+            if mvector.length() < precision:
+                continue
+
+            # nearest cv
+            cvArray = OpenMaya.MPointArray()
+            mfnNurbsCurve.getCVs(cvArray, OpenMaya.MSpace.kWorld)
+            nearest = []
+            lastDistance = None
+
+            for n in range(mfnNurbsCurve.numCVs()):
+                if n == 0 or n == cvArray.length() - 1:
+                    continue
+
+                distance = mPoint.distanceTo(cvArray[n])
+
+                if not nearest or distance < lastDistance:
+                    nearest = []
+                    nearest.append(cvArray[n])
+                    nearest.append(n)
+
+                    lastDistance = distance
+
+            mfnNurbsCurve.setCV(nearest[1], nearest[0] + mvector, OpenMaya.MSpace.kWorld)
+
+    mfnNurbsCurve.updateCurve()
