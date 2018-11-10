@@ -221,13 +221,21 @@ class autoRig(object):
             # formula for scale: 1+(factorScale - 1)*influence
             # TODO: rename all this
 
-            # connect to joints
-            # review: create parent constraints, once drivers have been created, if not, all flip
             jointNameSplit = str(joint).split('_')[1]  # review, maybe better store joints name in a list
-            pm.parentConstraint(jointDriverList[n], spineJoints[n], maintainOffset=True, name='%s_drv_%s_%s_%s_parentConstraint' % (self.chName, zone, jointNameSplit, n+1))
 
             if re.match('.*(end).*', str(joint)):
+                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False,
+                                    name='%s_drv_%s_%s_1_parentConstraint' % (
+                                        self.chName, zone, jointNameSplit))
+                endJointOrientConstraint = pm.orientConstraint(spineIKControllerList[-1], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
+                endJointOrientConstraint.interpType.set(0)
                 continue
+
+            # connect to joints
+            # review: create parent constraints, once drivers have been created, if not, all flip
+            pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True,
+                                name='%s_drv_%s_%s_1_parentConstraint' % (
+                                self.chName, zone, jointNameSplit))
 
             # TODO: rename nodes
             multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
