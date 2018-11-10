@@ -162,19 +162,24 @@ class autoRig(object):
             # drive joint by a parent constraint
             jointDriverList.append(jointDriverGrp)
 
+            # index to assign upVector Object
+            objUpVectorIndex = -1
             # up vector transforms, useful for later aimContraint
-            ObjectUpVector = pm.group(empty=True, name='%s_drv_%s_%s_%s_upVector' % (self.chName,zone,jointNameSplit, n+1))
-            # ObjectUpVector = pm.spaceLocator(name='%s_upVector' % str(joint))
-            ObjectUpVector.setTranslation(jointDriverGrp.getTranslation() + pm.datatypes.Vector(0, 0, -20), 'world')
-            noXformSpineGrp.addChild(ObjectUpVector)
-            ObjectUpVectorList.append(ObjectUpVector)
-
+            if not n ==len(spineJoints)-1:
+                ObjectUpVector = pm.group(empty=True, name='%s_drv_%s_%s_%s_upVector' % (self.chName,zone,jointNameSplit, n+1))
+                # ObjectUpVector = pm.spaceLocator(name='%s_upVector' % str(joint))
+                ObjectUpVector.setTranslation(jointDriverGrp.getTranslation() + pm.datatypes.Vector(0, 0, -20), 'world')
+                noXformSpineGrp.addChild(ObjectUpVector)
+                ObjectUpVectorList.append(ObjectUpVector)
+                # if not last iteration index -1
+                objUpVectorIndex = -2
             # AimConstraint locators, each locator aim to the upper locator
             if n == 0:
-                # parent first target transform, to hips controller
+                # parent first ObjectUpVector, to hips controller
                 spineIKControllerList[0].addChild(ObjectUpVector)
             else:
-                aimConstraint = pm.aimConstraint(jointDriverList[-1], jointDriverList[-2], aimVector=(1,0,0), upVector=(0,1,0), worldUpType='object', worldUpObject=ObjectUpVectorList[-2])
+                aimConstraint = pm.aimConstraint(jointDriverList[-1], jointDriverList[-2], aimVector=(1,0,0), upVector=(0,1,0), worldUpType='object', worldUpObject=ObjectUpVectorList[objUpVectorIndex])
+
 
         # parent last target transform, to chest
         spineIKControllerList[-1].addChild(ObjectUpVectorList[-1])
@@ -215,31 +220,32 @@ class autoRig(object):
             # for each joint, create a multiply divide node
             # formula for scale: 1+(factorScale - 1)*influence
             # TODO: rename all this
-            if re.match('.*chest.*', str(joint)):
-                continue
 
             # connect to joints
             # review: create parent constraints, once drivers have been created, if not, all flip
             jointNameSplit = str(joint).split('_')[1]  # review, maybe better store joints name in a list
             pm.parentConstraint(jointDriverList[n], spineJoints[n], maintainOffset=True, name='%s_drv_%s_%s_%s_parentConstraint' % (self.chName, zone, jointNameSplit, n+1))
 
+            if re.match('.*(end).*', str(joint)):
+                continue
+
             # TODO: rename nodes
-            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
+            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
             multiplyDivide.operation.set(2)
             multiplyDivide.input1X.set(spineCurveLength)
             curveInfo.arcLength.connect(multiplyDivide.input2X)
-            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
+            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_1_plusMinusAverage' % (self.chName, zone, jointNameSplit))
             multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
             plusMinusAverage.input1D[1].set(-1)
-            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_b_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
+            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_2_multiplyDivide' % (self.chName, zone, jointNameSplit))
             plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
             # frame cache
-            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_%s_frameCache' % (self.chName, zone, jointNameSplit, n+1))
+            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_frameCache' % (self.chName, zone, jointNameSplit))
             scaleInfluenceCurve.output.connect(frameCache.stream)
             frameCache.varyTime.set(n)
             frameCache.varying.connect(multiplyDivideInfluence.input2X)
             # plus 1
-            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_b_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
+            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_2_plusMinusAverage' % (self.chName, zone, jointNameSplit))
             multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
             plusMinusAverageToJoint.input1D[1].set(1)
 
@@ -407,8 +413,8 @@ class autoRig(object):
             jointDriverList.append(jointDriverGrp)
 
             # up vector transforms, useful for later aimContraint
-            # ObjectUpVector = pm.group(empty=True, name='%s_upVector' % str(joint))
-            ObjectUpVector = pm.spaceLocator(name='%s_drv_%s_%s_%s_upVector' % (self.chName,zone,jointNameSplit, n+1))
+            ObjectUpVector = pm.group(empty=True, name='%s_upVector' % str(joint))
+            # ObjectUpVector = pm.spaceLocator(name='%s_drv_%s_%s_%s_upVector' % (self.chName,zone,jointNameSplit, n+1))
             ObjectUpVector.setTranslation(jointDriverGrp.getTranslation() + pm.datatypes.Vector(0, 0, -20), 'world')
             noXformNeckHeadGrp.addChild(ObjectUpVector)
             ObjectUpVectorList.append(ObjectUpVector)
@@ -462,29 +468,29 @@ class autoRig(object):
             # review: create parent constraints, once drivers have been created, if not, all flip
             if re.match('.*head.*', str(joint)):
                 # head joint, with point to driver, and orient to controller
-                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False, name='%s_drv_%s_%s_%s_pointConstraint' % (self.chName, zone, jointNameSplit, n+1))
-                pm.orientConstraint(neckHeadIKCtrList[-1], joint, maintainOffset=True, name='%s_drv_%s_%s_%s_orientConstraint' % (self.chName, zone, jointNameSplit, n+1))
+                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False, name='%s_drv_%s_%s_1_pointConstraint' % (self.chName, zone, jointNameSplit))
+                pm.orientConstraint(neckHeadIKCtrList[-1], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
 
             else:
-                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_%s_parentConstraint' % (self.chName, zone, jointNameSplit, n+1))
+                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
 
 
-            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
+            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
             multiplyDivide.operation.set(2)
             multiplyDivide.input1X.set(neckHeadCurveLength)
             curveInfo.arcLength.connect(multiplyDivide.input2X)
-            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
+            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_1_plusMinusAverage' % (self.chName, zone, jointNameSplit))
             multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
             plusMinusAverage.input1D[1].set(-1)
-            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_b_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
+            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_2_multiplyDivide' % (self.chName, zone, jointNameSplit))
             plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
             # frame cache
-            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_%s_frameCache' % (self.chName, zone, jointNameSplit, n+1))
+            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_1_frameCache' % (self.chName, zone, jointNameSplit))
             scaleInfluenceCurve.output.connect(frameCache.stream)
             frameCache.varyTime.set(n)
             frameCache.varying.connect(multiplyDivideInfluence.input2X)
             # plus 1
-            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_b_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
+            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_2_plusMinusAverage' % (self.chName, zone, jointNameSplit))
             multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
             plusMinusAverageToJoint.input1D[1].set(1)
 
