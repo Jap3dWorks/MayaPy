@@ -35,19 +35,20 @@ class autoRig(object):
             self.ctrGrp = pm.group(name='%s_ctr_grp' % self.chName, empty=True)
             pm.PyNode('%s_rig_grp' % self.chName).addChild(self.ctrGrp)
 
-
+    # TODO: zone var in names
     def autoSpine(self, zone='spine'):
         """
             Auto create a character spine
         """
-        # TODO: type joint pm.ls
+        # TODO: check spine list sort, by hierarchy descending
         # detect spine joints and their positions
-        spineJoints = [i for i in pm.ls() if re.match('^%s.*((hips)|(spine)|(chest)).*joint$' % self.chName, str(i))]
-        positions = [i.getTranslation(space='world') for i in spineJoints]
+        spineJoints = [point for point in pm.ls() if re.match('^%s.*((hips)|(spine)|(chest)).*joint$' % self.chName, str(point))]
+        positions = [point.getTranslation(space='world') for point in spineJoints]
+        logger.debug('Spine joints: %s' % spineJoints)
 
-        spineCurveTransform = pm.curve(ep=positions, name='%s_spine_1_crv' % self.chName)
+        spineCurveTransform = pm.curve(ep=positions, name='%s_%s_1_crv' % (self.chName, zone))
         # parent to nXform grp
-        noXformSpineGrp = pm.group(empty=True, name='%s_noXform_spine_grp' % self.chName)
+        noXformSpineGrp = pm.group(empty=True, name='%s_noXform_%s_grp' % (self.chName, zone))
         noXformSpineGrp.inheritsTransform.set(False)
         self.noXformGrp.addChild(noXformSpineGrp)
         noXformSpineGrp.addChild(spineCurveTransform)
@@ -59,32 +60,38 @@ class autoRig(object):
         pm.rebuildCurve(spineCurve, s=2, rpo=True, ch=False, rt=0, d=3, kt=0, kr=0)
 
         # review: test autoMethod
-        # TODO: search an automation, use  distanceToCurve
         adjustCurveToPoints(spineJoints, spineCurve, 16, 0.01)
 
         # create locators and connect to curve CV's
         spineDrvList = []
         spineIKControllerList = []
         spineFKControllerList = []
-        for n, i in enumerate(spineCurve.getCVs()):
-            # TODO: nice ik controllers shape
+        for n, point in enumerate(spineCurve.getCVs()):
+            ctrType = 'hips' if n == 0 else 'chest' if n == spineCurve.numCVs() - 1 else 'spine%s' % n
             # create grp to manipulate the curve
-            spineDriver = pm.group(name='%s_spineCurve_%s_drv' % (self.chName, n+1), empty=True)
-            spineDriver.setTranslation(i)
-            decomposeMatrix = pm.createNode('decomposeMatrix', name='%s_spine_%s_decomposeMatrix' % (self.chName, n+1))
+            spineDriver = pm.group(name='%s_Curve_%s_%s_drv' % (self.chName, zone, ctrType), empty=True)
+            spineDriver.setTranslation(point)
+            decomposeMatrix = pm.createNode('decomposeMatrix', name='%s_%s_%s_decomposeMatrix' % (self.chName, zone, ctrType))
             spineDriver.worldMatrix[0].connect(decomposeMatrix.inputMatrix)
             decomposeMatrix.outputTranslate.connect(spineCurve.controlPoints[n])
             spineDrvList.append(spineDriver)
 
             # create controller and parent locator
-            ctrType = 'hips' if n == 0 else 'chest' if n == spineCurve.numCVs()-1 else 'spine%s' % n
-            spineController = self.createController('%s_spine_IK_%s_ctr' % (self.chName, n+1), '%sIk' % ctrType,1, 17)
+            # TODO: numeration of controllers is wrong
+            spineController = self.createController('%s_IK_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
             logger.debug('spine controller: %s' % spineController)
-            spineController.setTranslation(i)
+
+            # try make chest deform more "natural"
+            if n == spineCurve.numCVs()-1:
+                lastSpineIkController = spineIKControllerList[1].getTranslation('world')
+                spineController.setTranslation((lastSpineIkController[0], point[1], lastSpineIkController[2]))
+            else:
+                spineController.setTranslation(point)
+
             spineController.addChild(spineDriver)
             spineIKControllerList.append(spineController)
 
-            # spine type controllers only trasnlate
+            # spine type controllers only translate, lock unused attr
             if 'spine' in ctrType:
                 lockAndHideAttr(spineController, False, True, True)
 
@@ -92,8 +99,8 @@ class autoRig(object):
             if n < 3:
                 # first fk controller bigger
                 fkCtrSize = 1.5 if len(spineFKControllerList) == 0 else 1
-                spineFKController = self.createController('%s_spine_FK_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
-                spineFKController.setTranslation(i)
+                spineFKController = self.createController('%s_FK_spine_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
+                spineFKController.setTranslation(point)
                 spineFKControllerList.append(spineFKController)
 
                 # Fk hierarchy
@@ -144,9 +151,10 @@ class autoRig(object):
             param = util.getDouble(ptr)
 
             # create empty grp and connect nodes
-            jointDriverGrp = pm.group(empty=True, name='%s_target' % str(joint))
+            jointNameSplit = str(joint).split('_')[1]
+            jointDriverGrp = pm.group(empty=True, name='%s_drv_%s_%s_%s_drv' % (self.chName, zone, jointNameSplit, n+1))
             # jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
-            pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%s_spine_joint_%s_positionOnCurveInfo' % (self.chName, n+1))
+            pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%s_drv_%s_%s_%s_positionOnCurveInfo' % (self.chName, zone, jointNameSplit, n+1))
             spineCurve.worldSpace[0].connect(pointOnCurveInfo.inputCurve)
             pointOnCurveInfo.parameter.set(param)
             pointOnCurveInfo.position.connect(jointDriverGrp.translate)
@@ -155,7 +163,7 @@ class autoRig(object):
             jointDriverList.append(jointDriverGrp)
 
             # up vector transforms, useful for later aimContraint
-            ObjectUpVector = pm.group(empty=True, name='%s_upVector' % str(joint))
+            ObjectUpVector = pm.group(empty=True, name='%s_drv_%s_%s_%s_upVector' % (self.chName,zone,jointNameSplit, n+1))
             # ObjectUpVector = pm.spaceLocator(name='%s_upVector' % str(joint))
             ObjectUpVector.setTranslation(jointDriverGrp.getTranslation() + pm.datatypes.Vector(0, 0, -20), 'world')
             noXformSpineGrp.addChild(ObjectUpVector)
@@ -170,36 +178,36 @@ class autoRig(object):
 
         # parent last target transform, to chest
         spineIKControllerList[-1].addChild(ObjectUpVectorList[-1])
-        # review: create parent constraints, once drivers have been created, if not, all flip
-        for i in range(len(spineJoints[:-1])):
-            pm.parentConstraint(jointDriverList[i], spineJoints[i], maintainOffset=True, name='%s_parentConstraint' % str(joint))
 
-        # connect by pointcontraint objectUpVector to first and last upVectors
+        # objectUpVector conections, by pointContraint
         totalDistance = ObjectUpVectorList[-1].getTranslation('world') - ObjectUpVectorList[0].getTranslation('world')
         logger.debug('totalDistance: %s' % totalDistance)
         totalDistance = totalDistance.length()
         logger.debug('totalDistance: %s' % totalDistance)
 
+        # can't do this before, because we need de first and the last upVectorObjects to config the pointConstraints
+        # connect ipVectorObjects with point constraint
         for n, upVectorObject in enumerate(ObjectUpVectorList):
             if n == 0 or n == len(ObjectUpVectorList)-1:
                 continue
+            jointNameSplit = str(spineJoints[n]).split('_')[1]
             distance = upVectorObject.getTranslation('world') - ObjectUpVectorList[0].getTranslation('world')
             distance = distance.length()
             pointConstraintFactor = distance/totalDistance
 
-            pointContraint = pm.pointConstraint(ObjectUpVectorList[-1], ObjectUpVectorList[0], upVectorObject, maintainOffset=False, name='%s_pointConstraint' % str(upVectorObject))
+            pointContraint = pm.pointConstraint(ObjectUpVectorList[-1], ObjectUpVectorList[0], upVectorObject, maintainOffset=False, name='%s_drv_%s_%s_upVector_pointConstraint' % (self.chName,zone,jointNameSplit))
             pointContraint.attr('%sW0' % str(ObjectUpVectorList[-1])).set(pointConstraintFactor)
             pointContraint.attr('%sW1' % str(ObjectUpVectorList[0])).set(1-pointConstraintFactor)
 
         # stretch squash spine
         # curveInfo and connect spineCurve
-        curveInfo = pm.createNode('curveInfo')
+        curveInfo = pm.createNode('curveInfo', name='%s_stretchSquash_%s_1_curveInfo' % (self.chName, zone))
         spineCurve.worldSpace[0].connect(curveInfo.inputCurve)
         spineCurveLength = spineCurve.length()
 
         # create anim curve to control scale influence
         # maybe this is better to do with a curveAttr
-        scaleInfluenceCurve = pm.createNode('animCurveTU')
+        scaleInfluenceCurve = pm.createNode('animCurveTU', name='%s_stretchSquash_%s_1_animCurve' % (self.chName, zone))
         scaleInfluenceCurve.addKeyframe(0, 0.0)
         scaleInfluenceCurve.addKeyframe(len(spineJoints)//2, 1.0)
         scaleInfluenceCurve.addKeyframe(len(spineJoints)-1, 0.0)
@@ -209,22 +217,29 @@ class autoRig(object):
             # TODO: rename all this
             if re.match('.*chest.*', str(joint)):
                 continue
-            multiplyDivide = pm.createNode('multiplyDivide')
+
+            # connect to joints
+            # review: create parent constraints, once drivers have been created, if not, all flip
+            jointNameSplit = str(joint).split('_')[1]  # review, maybe better store joints name in a list
+            pm.parentConstraint(jointDriverList[n], spineJoints[n], maintainOffset=True, name='%s_drv_%s_%s_%s_parentConstraint' % (self.chName, zone, jointNameSplit, n+1))
+
+            # TODO: rename nodes
+            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
             multiplyDivide.operation.set(2)
             multiplyDivide.input1X.set(spineCurveLength)
             curveInfo.arcLength.connect(multiplyDivide.input2X)
-            plusMinusAverage = pm.createNode('plusMinusAverage')
+            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
             multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
             plusMinusAverage.input1D[1].set(-1)
-            multiplyDivideInfluence = pm.createNode('multiplyDivide')
+            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_b_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
             plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
             # frame cache
-            frameCache = pm.createNode('frameCache')
+            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_%s_frameCache' % (self.chName, zone, jointNameSplit, n+1))
             scaleInfluenceCurve.output.connect(frameCache.stream)
             frameCache.varyTime.set(n)
             frameCache.varying.connect(multiplyDivideInfluence.input2X)
             # plus 1
-            plusMinusAverageToJoint = pm.createNode('plusMinusAverage')
+            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_b_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
             multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
             plusMinusAverageToJoint.input1D[1].set(1)
 
@@ -239,14 +254,14 @@ class autoRig(object):
 
     def autoNeckHead(self, zone='neckHead'):
         # store joints, not end joint
-        neckHeadJoints = [i for i in pm.ls() if re.match('^%s.*(neck|head).*joint$' % self.chName, str(i))]
+        neckHeadJoints = [point for point in pm.ls() if re.match('^%s.*(neck|head).*joint$' % self.chName, str(point))]
         logger.debug('Neck head joints: %s' % neckHeadJoints)
-        positions = [i.getTranslation(space='world') for i in neckHeadJoints[:-1]]
+        positions = [point.getTranslation(space='world') for point in neckHeadJoints[:-1]]
         #  positions.append((positions[-1][0],positions[-1][1]+3,positions[-1][2]))  extra point for head
 
-        neckHeadCurveTransform = pm.curve(ep=positions, name='%s_spine_1_crv' % self.chName)
+        neckHeadCurveTransform = pm.curve(ep=positions, name='%s_%s_1_crv' % (self.chName, zone))
         # parent to noXform grp
-        noXformNeckHeadGrp = pm.group(empty=True, name='%s_noXform_neck_head_grp' % self.chName)
+        noXformNeckHeadGrp = pm.group(empty=True, name='%s_noXform_%s_grp' % (self.chName, zone))
         noXformNeckHeadGrp.inheritsTransform.set(False)
         self.noXformGrp.addChild(noXformNeckHeadGrp)
         noXformNeckHeadGrp.addChild(neckHeadCurveTransform)
@@ -265,14 +280,12 @@ class autoRig(object):
         neckHeadIKCtrList = []
         neckHeadFKCtrList = []
 
-        for n, i in enumerate(neckHeadCurve.getCVs()):
-            # TODO: nice ik controllers shape
+        for n, point in enumerate(neckHeadCurve.getCVs()):
             # create drivers to manipulate the curve
-            neckHeadDriver = pm.group(name='%s_neckHeadCurve_%s_drv' % (self.chName, n+1), empty=True)
-            # neckHeadDriver = pm.spaceLocator(name='%s_neckHeadCurve_%s_drv' % (self.chName, n+1))
-            neckHeadDriver.setTranslation(i)
-            # use the worldMatrix
-            decomposeMatrix = pm.createNode('decomposeMatrix', name='%s_neckHead_%s_decomposeMatrix' % (self.chName, n+1))
+            neckHeadDriver = pm.group(name='%s_Curve_%s_%s_drv' % (self.chName, zone, n+1), empty=True)
+            neckHeadDriver.setTranslation(point)
+            # use the worldMatrix TODO: rename better no neckhead_3 -> head_1
+            decomposeMatrix = pm.createNode('decomposeMatrix', name='%s_%s_%s_decomposeMatrix' % (self.chName,zone, n+1))
             neckHeadDriver.worldMatrix[0].connect(decomposeMatrix.inputMatrix)
             decomposeMatrix.outputTranslate.connect(neckHeadCurve.controlPoints[n])
             # set last ik spine controller as parent
@@ -280,23 +293,27 @@ class autoRig(object):
             neckHeadDrvList.append(neckHeadDriver)  # add to drv List
 
             # no create controller two first drivers and the penultimate
+            # TODO: better continue after if
             if n > 1 and not n == neckHeadCurve.numCVs()-2:
                 # create controller and parent drivers to controllers
                 ctrType = 'neck' if not len(neckHeadIKCtrList) else 'head'
-                neckHeadIKCtr = self.createController('%s_%s_IK_%s_ctr' % (self.chName,ctrType,len(neckHeadIKCtrList)+1), '%sIk' % ctrType, 1, 17)
+                neckHeadIKCtr = self.createController('%s_IK_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
                 logger.debug('neckHead controller: %s' % neckHeadIKCtr)
 
-                # second controller more smooth deform up the first
-                ikCtrPos = i if len(neckHeadIKCtrList) == 0 else (neckHeadIKCtrList[-1].getTranslation('world')[0], i[1], neckHeadIKCtrList[-1].getTranslation('world')[2])
+                # try make head deform more "natural"
+                if n == neckHeadCurve.numCVs() - 1:
+                    lastSpineIkController = neckHeadIKCtrList[-1].getTranslation('world')
+                    neckHeadIKCtr.setTranslation((lastSpineIkController[0], point[1], lastSpineIkController[2]))
+                else:
+                    neckHeadIKCtr.setTranslation(point)
 
-                neckHeadIKCtr.setTranslation(ikCtrPos)
                 neckHeadIKCtr.addChild(neckHeadDriver)
                 neckHeadIKCtrList.append(neckHeadIKCtr)  # add to ik controller List
 
                 # create FK controllers, only with the first ik controller
                 if len(neckHeadIKCtrList) == 1:
-                    neckHeadFKCtr = self.createController('%s_neckHead_FK_%s_ctr' % (self.chName,len(neckHeadFKCtrList)+1), 'hipsFk',.5,4)
-                    neckHeadFKCtr.setTranslation(i)
+                    neckHeadFKCtr = self.createController('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'hipsFk',.5,4)
+                    neckHeadFKCtr.setTranslation(point)
                     neckHeadFKCtrList.append(neckHeadFKCtr)
                     # Fk hierarchy, if we have more fk controllers. not the case
                     if len(neckHeadFKCtrList) > 1:
@@ -308,7 +325,8 @@ class autoRig(object):
         neckHeadIKCtrList[-1].addChild(neckHeadDrvList[-2])  # add the penultimate driver too
         self.ikControllers['spine'][-1].addChild(neckHeadIKCtrList[0])  # ik controller child of last spine controller
         neckHeadIKCtrList[0].addChild(neckHeadDrvList[1])
-        neckHeadIKCtrList[-1].rename('%s_head_IK_1_ctr' % self.chName)
+        # rename head control
+        neckHeadIKCtrList[-1].rename('%s_IK_%s_head_1_ctr' % (self.chName, zone))  # review: better here or above?
         # Fk parent to last ik spine controller
         self.ikControllers['spine'][-1].addChild(neckHeadFKCtrList[-1])
 
@@ -323,17 +341,17 @@ class autoRig(object):
 
         # head orient auto
         # head orient neck grp
-        neckOrientAuto = pm.group(empty=True, name='%s_head_orientAuto_head_grp' % self.chName)
+        neckOrientAuto = pm.group(empty=True, name='%s_orientAuto_%s_head_1_grp' % (self.chName, zone))
         neckOrientAuto.setTranslation(neckHeadIKCtrList[-1].getTranslation('world'), 'world')
         neckHeadFKCtrList[-1].addChild(neckOrientAuto)
 
-        headIkAutoGrp = pm.group(empty=True, name='%s_head_ikAuto_grp' % self.chName)
+        headIkAutoGrp = pm.group(empty=True, name='%s_orientAuto_%s_head_ikAuto_1_grp' % (self.chName, zone))
         headIkAutoGrp.setTranslation(neckHeadIKCtrList[-1].getTranslation('world'), 'world')
         neckHeadFKCtrList[-1].addChild(headIkAutoGrp)
         headIkAutoGrp.addChild(neckHeadIKCtrRoots[-1])
 
         # head orient base grp
-        baseOrientAuto = pm.group(empty=True, name='%s_head_orientAuto_base_grp' % self.chName)
+        baseOrientAuto = pm.group(empty=True, name='%s_orientAuto_%s_head_base_1_grp' % (self.chName, zone))
         baseOrientAuto.setTranslation(neckOrientAuto.getTranslation('world'), 'world')
         self.ctrGrp.addChild(baseOrientAuto)
 
@@ -342,12 +360,12 @@ class autoRig(object):
                    maxValue=1.0, type='float', defaultValue=0.0, k=True)
 
         # constraint head controller offset to orient auto grps
-        autoOrientConstraint = pm.parentConstraint(baseOrientAuto, neckOrientAuto, headIkAutoGrp, maintainOffset=False, name='%s_head_autoOrient_parentConstraint' % self.chName)
+        autoOrientConstraint = pm.parentConstraint(baseOrientAuto, neckOrientAuto, headIkAutoGrp, maintainOffset=False, name='%s_autoOrient_%s_head_1_parentConstraint' % (self.chName, zone))
 
         # create Nodes and connect
         neckHeadIKCtrList[-1].Isolate.connect(autoOrientConstraint.attr('%sW0' % str(baseOrientAuto)))
 
-        plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_head_orientAuto_isolate_plusMinusAverage' % self.chName)
+        plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_orientAuto_%s_head_isolate_1_plusMinusAverage' % (self.chName, zone))
         neckHeadIKCtrList[-1].Isolate.connect(plusMinusAverage.input1D[1])
         plusMinusAverage.input1D[0].set(1)
         plusMinusAverage.operation.set(2)
@@ -377,9 +395,10 @@ class autoRig(object):
             except:
                 param = 1.0
             # create empty grp and connect nodes
-            jointDriverGrp = pm.group(empty=True, name='%s_target' % str(joint))
+            jointNameSplit = str(joint).split('_')[1]
+            jointDriverGrp = pm.group(empty=True, name='%s_drv_%s_%s_%s_drv' % (self.chName, zone, jointNameSplit, n+1))
             # jointDriverGrp = pm.spaceLocator(name='%s_target' % str(joint))
-            pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%sneckHead%s_positionOnCurveInfo' % (self.chName, n + 1))
+            pointOnCurveInfo = pm.createNode('pointOnCurveInfo', name='%s_drv_%s_%s_%s_positionOnCurveInfo' % (self.chName, zone, jointNameSplit, n+1))
             neckHeadCurve.worldSpace[0].connect(pointOnCurveInfo.inputCurve)
             pointOnCurveInfo.parameter.set(param)
             pointOnCurveInfo.position.connect(jointDriverGrp.translate)
@@ -389,7 +408,7 @@ class autoRig(object):
 
             # up vector transforms, useful for later aimContraint
             # ObjectUpVector = pm.group(empty=True, name='%s_upVector' % str(joint))
-            ObjectUpVector = pm.spaceLocator(name='%s_upVector' % str(joint))
+            ObjectUpVector = pm.spaceLocator(name='%s_drv_%s_%s_%s_upVector' % (self.chName,zone,jointNameSplit, n+1))
             ObjectUpVector.setTranslation(jointDriverGrp.getTranslation() + pm.datatypes.Vector(0, 0, -20), 'world')
             noXformNeckHeadGrp.addChild(ObjectUpVector)
             ObjectUpVectorList.append(ObjectUpVector)
@@ -416,19 +435,19 @@ class autoRig(object):
             pointConstraintFactor = distance / totalDistance
 
             pointContraint = pm.pointConstraint(ObjectUpVectorList[-1], ObjectUpVectorList[0], upVectorObject,
-                                                maintainOffset=False, name='%s_pointConstraint' % str(upVectorObject))
+                                                maintainOffset=False, name='%s_drv_%s_%s_upVector_pointConstraint' % (self.chName,zone,jointNameSplit))
             pointContraint.attr('%sW0' % str(ObjectUpVectorList[-1])).set(pointConstraintFactor)
             pointContraint.attr('%sW1' % str(ObjectUpVectorList[0])).set(1 - pointConstraintFactor)
 
         # stretch squash neck
         # curveInfo and connect neckHeadCurve
-        curveInfo = pm.createNode('curveInfo', name='%s_neckHeadCurve_curveInfo' %(self.chName))
+        curveInfo = pm.createNode('curveInfo', name='%s_stretchSquash_%s_1_curveInfo' % (self.chName, zone))
         neckHeadCurve.worldSpace[0].connect(curveInfo.inputCurve)
         neckHeadCurveLength = neckHeadCurve.length()
 
         # create anim curve to control scale influence
         # maybe this is better to do with a curveAttr
-        scaleInfluenceCurve = pm.createNode('animCurveTU')
+        scaleInfluenceCurve = pm.createNode('animCurveTU', name='%s_stretchSquash_%s_1_animCurve' % (self.chName, zone))
         scaleInfluenceCurve.addKeyframe(0, 0.0)
         scaleInfluenceCurve.addKeyframe((len(neckHeadJoints)-1)//2, 1.0)
         scaleInfluenceCurve.addKeyframe(len(neckHeadJoints)-2, 0.0)
@@ -439,32 +458,33 @@ class autoRig(object):
             if re.match('.*tip.*', str(joint)):
                 continue
 
+            jointNameSplit = str(joint).split('_')[1]
             # review: create parent constraints, once drivers have been created, if not, all flip
-            elif re.match('.*head.*', str(joint)):
+            if re.match('.*head.*', str(joint)):
                 # head joint, with point to driver, and orient to controller
-                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False, name='%s_pointConstraint' % str(joint))
-                pm.orientConstraint(neckHeadIKCtrList[-1], joint, maintainOffset=True, name='%s_orientConstraint' % str(joint))
+                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False, name='%s_drv_%s_%s_%s_pointConstraint' % (self.chName, zone, jointNameSplit, n+1))
+                pm.orientConstraint(neckHeadIKCtrList[-1], joint, maintainOffset=True, name='%s_drv_%s_%s_%s_orientConstraint' % (self.chName, zone, jointNameSplit, n+1))
 
             else:
-                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_parentConstraint' % str(joint))
+                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_%s_parentConstraint' % (self.chName, zone, jointNameSplit, n+1))
 
 
-            multiplyDivide = pm.createNode('multiplyDivide')
+            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
             multiplyDivide.operation.set(2)
             multiplyDivide.input1X.set(neckHeadCurveLength)
             curveInfo.arcLength.connect(multiplyDivide.input2X)
-            plusMinusAverage = pm.createNode('plusMinusAverage')
+            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
             multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
             plusMinusAverage.input1D[1].set(-1)
-            multiplyDivideInfluence = pm.createNode('multiplyDivide')
+            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_%s_b_multiplyDivide' % (self.chName, zone, jointNameSplit, n+1))
             plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
             # frame cache
-            frameCache = pm.createNode('frameCache')
+            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_%s_frameCache' % (self.chName, zone, jointNameSplit, n+1))
             scaleInfluenceCurve.output.connect(frameCache.stream)
             frameCache.varyTime.set(n)
             frameCache.varying.connect(multiplyDivideInfluence.input2X)
             # plus 1
-            plusMinusAverageToJoint = pm.createNode('plusMinusAverage')
+            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_%s_b_plusMinusAverage' % (self.chName, zone, jointNameSplit, n+1))
             multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
             plusMinusAverageToJoint.input1D[1].set(1)
 
@@ -472,6 +492,9 @@ class autoRig(object):
             plusMinusAverageToJoint.output1D.connect(joint.scaleY)
             plusMinusAverageToJoint.output1D.connect(joint.scaleZ)
 
+        # save data
+        self.joints[zone] = neckHeadJoints
+        self.ikControllers[zone] = neckHeadIKCtrList
 
     def createController(self, name, controllerType, s=1.0, colorIndex=4):
         """
