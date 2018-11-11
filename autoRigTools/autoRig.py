@@ -123,7 +123,18 @@ class autoRig(object):
 
         # create roots grp
         createRoots(*spineFKControllerList)
-        createRoots(*spineIKControllerList)
+        spineControllerRootsList = createRoots(*spineIKControllerList)
+
+        """
+        # middle controller pointConstraint, chest and hips controllers
+        pointGrp = pm.group(empty=True, name='%s_pointCostraint_%s_1_grp' % (self.chName, zone))
+        middleOffsetGrp = spineControllerRootsList[len(spineControllerRootsList)//2]
+        middleOffsetGrpParent = middleOffsetGrp.firstParent()
+        middleOffsetGrpParent.addChild(pointGrp)
+
+        pm.pointConstraint(spineIKControllerList[1], spineIKControllerList[-2], pointGrp, maintainOffset=True, name='%s_pointCostraint_%s_1_pointCostraint' % (self.chName, zone))
+        pointGrp.addChild(middleOffsetGrp)
+        """
 
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
         for neckHeadIKCtr in spineFKControllerList[1:]:
@@ -223,19 +234,20 @@ class autoRig(object):
 
             jointNameSplit = str(joint).split('_')[1]  # review, maybe better store joints name in a list
 
-            if re.match('.*(end).*', str(joint)):
+            if re.match('.*(end|hips).*', str(joint)):
                 pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False,
                                     name='%s_drv_%s_%s_1_parentConstraint' % (
                                         self.chName, zone, jointNameSplit))
-                endJointOrientConstraint = pm.orientConstraint(spineIKControllerList[-1], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
+                endJointOrientConstraint = pm.orientConstraint(spineIKControllerList[min(n, len(spineIKControllerList)-1)], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
                 endJointOrientConstraint.interpType.set(0)
-                continue
-
-            # connect to joints
-            # review: create parent constraints, once drivers have been created, if not, all flip
-            pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True,
-                                name='%s_drv_%s_%s_1_parentConstraint' % (
-                                self.chName, zone, jointNameSplit))
+                if 'end' in str(joint):
+                    continue
+            else:
+                # connect to joints
+                # review: create parent constraints, once drivers have been created, if not, all flip
+                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True,
+                                    name='%s_drv_%s_%s_1_parentConstraint' % (
+                                    self.chName, zone, jointNameSplit))
 
             # TODO: rename nodes
             multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
@@ -353,7 +365,7 @@ class autoRig(object):
         # lock and hide neck attr, it's here because we have only one
         lockAndHideAttr(neckHeadIKCtrList[0], False, True, True)
 
-        # head orient auto
+        # head orient auto, isolate
         # head orient neck grp
         neckOrientAuto = pm.group(empty=True, name='%s_orientAuto_%s_head_1_grp' % (self.chName, zone))
         neckOrientAuto.setTranslation(neckHeadIKCtrList[-1].getTranslation('world'), 'world')
@@ -370,20 +382,30 @@ class autoRig(object):
         self.ctrGrp.addChild(baseOrientAuto)
 
         # create driver attr
-        pm.addAttr(neckHeadIKCtrList[-1], longName='Isolate', shortName='Isolate', minValue=0.0,
+        pm.addAttr(neckHeadIKCtrList[-1], longName='isolateOrient', shortName='isolateOrient', minValue=0.0,
+                   maxValue=1.0, type='float', defaultValue=0.0, k=True)
+        pm.addAttr(neckHeadIKCtrList[-1], longName='isolatePoint', shortName='isolatePoint', minValue=0.0,
                    maxValue=1.0, type='float', defaultValue=0.0, k=True)
 
         # constraint head controller offset to orient auto grps
-        autoOrientConstraint = pm.parentConstraint(baseOrientAuto, neckOrientAuto, headIkAutoGrp, maintainOffset=False, name='%s_autoOrient_%s_head_1_parentConstraint' % (self.chName, zone))
+        autoOrientConstraint = pm.orientConstraint(baseOrientAuto, neckOrientAuto, headIkAutoGrp, maintainOffset=False, name='%s_autoOrient_%s_head_1_orientConstraint' % (self.chName, zone))
+        autoPointConstraint = pm.pointConstraint(baseOrientAuto, neckOrientAuto, headIkAutoGrp, maintainOffset=False, name='%s_autoOrient_%s_head_1_pointConstraint' % (self.chName, zone))
 
         # create Nodes and connect
-        neckHeadIKCtrList[-1].Isolate.connect(autoOrientConstraint.attr('%sW0' % str(baseOrientAuto)))
+        neckHeadIKCtrList[-1].isolateOrient.connect(autoOrientConstraint.attr('%sW0' % str(baseOrientAuto)))
+        neckHeadIKCtrList[-1].isolatePoint.connect(autoPointConstraint.attr('%sW0' % str(baseOrientAuto)))
 
-        plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_orientAuto_%s_head_isolate_1_plusMinusAverage' % (self.chName, zone))
-        neckHeadIKCtrList[-1].Isolate.connect(plusMinusAverage.input1D[1])
-        plusMinusAverage.input1D[0].set(1)
-        plusMinusAverage.operation.set(2)
-        plusMinusAverage.output1D.connect(autoOrientConstraint.attr('%sW1' % str(neckOrientAuto)))
+        plusMinusAverageOrient = pm.createNode('plusMinusAverage', name='%s_orientAuto_%s_head_isolateOrient_1_plusMinusAverage' % (self.chName, zone))
+        plusMinusAveragepoint = pm.createNode('plusMinusAverage', name='%s_pointAuto_%s_head_isolateOrient_1_plusMinusAverage' % (self.chName, zone))
+        neckHeadIKCtrList[-1].isolateOrient.connect(plusMinusAverageOrient.input1D[1])
+        neckHeadIKCtrList[-1].isolatePoint.connect(plusMinusAveragepoint.input1D[1])
+
+        plusMinusAverageOrient.input1D[0].set(1)
+        plusMinusAveragepoint.input1D[0].set(1)
+        plusMinusAverageOrient.operation.set(2)
+        plusMinusAveragepoint.operation.set(2)
+        plusMinusAverageOrient.output1D.connect(autoOrientConstraint.attr('%sW1' % str(neckOrientAuto)))
+        plusMinusAveragepoint.output1D.connect(autoPointConstraint.attr('%sW1' % str(neckOrientAuto)))
 
         # create points on curve that will drive the joints
         jointDriverList = []
