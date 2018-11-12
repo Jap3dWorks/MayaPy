@@ -553,20 +553,32 @@ class autoRig(object):
 
         NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
         # duplicate joints
-        for i in legJoints:
-            controllerName = str(i).split('_')[1]
-            legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
-            legIkJointList.append(i.duplicate(po=True, name='%s_ik_joint_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
+
+        for i, joint in enumerate(legJoints):
+            controllerName = str(joint).split('_')[1]
+            if i == 0:
+                # TODO: script better
+                # first duplicate, delete foot, and list rest of joints
+                # if i duplicate every joint and then reconstruct hierarchy,
+                # ikHandle makes a little displacement
+                legFkControllers = joint.duplicate()[0]
+                legFkControllers = pm.ls(legFkControllers, dag=True)
+                pm.delete(legFkControllers[len(legJoints)])
+                legFkControllersList = [j for n, j in enumerate(legFkControllers) if n < len(legJoints)]
+                print ('leg fk controllers: %s' % legFkControllersList)
+
+                legIkJoint = joint.duplicate()[0]
+                legIkJoint = pm.ls(legIkJoint, dag=True)
+                pm.delete(legIkJoint[len(legJoints)])
+                legIkJointList = [j for n, j in enumerate(legIkJoint) if n < len(legJoints)]
+
+            legFkControllersList[i].rename('%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))
+            legIkJointList[i].rename('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))
             NameIdList.append(controllerName)
 
-        legIkJointList[0].setRotation((0,0,0))
         # reconstruct hierarchy
         # create Fk control shapes
         for i, fkCtr in enumerate(legFkControllersList[:-1]):  # last controller does not has shape
-            # ik hierarchy
-            legIkJointList[i].addChild(legIkJointList[i + 1])
-
-            fkCtr.addChild(legFkControllersList[i+1])
             # fk controls
             shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]))
             # parentShape
@@ -584,13 +596,15 @@ class autoRig(object):
         # set prefered angle
         legIkJointList[1].preferredAngleZ.set(-15)
         # ik solver
-        # ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
-        # legIkControl.addChild(ikHandle)
+        ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
+        legIkControl.addChild(ikHandle)
         # create poles
         legPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
         relocatePole(legPoleController, legIkJointList, 20)
         # constraint poleVector
-        # pm.poleVectorConstraint(legPoleController, ikHandle)
+        pm.poleVectorConstraint(legPoleController, ikHandle)
+        # root poleVector
+        createRoots(legPoleController)
 
 
         # set world as parent
@@ -637,12 +651,23 @@ def relocatePole(pole, joints, distance=1):
     vector2 = OpenMaya.MVector(position2[0]-position1[0],position2[1]-position1[1],position2[2]-position1[2])
     vector2.normalize()
 
+    # z vector
     poleVector = (vector1 + vector2)
     poleVector.normalize()
-    poleVector = poleVector * distance
-    positionPoleVector = [poleVector.x + position2[0], poleVector.y + position2[1], poleVector.z + position2[2]]
 
-    pole.setTranslation(positionPoleVector, 'world')
+    # x vector cross product
+    xVector = vector2 ^ poleVector
+    xVector.normalize()
+
+    # y vector cross product
+    yVector = poleVector ^ xVector
+    yVector.normalize()
+
+    # positionPoleVector = [poleVector.x + position2[0], poleVector.y + position2[1], poleVector.z + position2[2]]
+
+    pole.setTransformation([xVector.x, xVector.y, xVector.z, 0, yVector.x, yVector.y, yVector.z, 0, poleVector.x, poleVector.y, poleVector.z, 0,
+                       poleVector.x * distance + position2[0], poleVector.y * distance + position2[1], poleVector.z * distance + position2[2],
+                      1])
 
 def createRoots(*args):
     roots = []
