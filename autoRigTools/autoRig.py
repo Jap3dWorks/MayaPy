@@ -8,8 +8,10 @@ logging.basicConfig()
 logger = logging.getLogger('autoRig:')
 logger.setLevel(logging.DEBUG)
 
+# TODO: IK fK lower case
+
 class autoRig(object):
-    def __init__(self, chName='akona', path='D:\_docs\_Animum\_leccion3\python'):
+    def __init__(self, chName='akona', path='D:\_docs\_Animum\Akona'):
         """
         autoRig class tools
         """
@@ -532,6 +534,71 @@ class autoRig(object):
         self.joints[zone] = neckHeadJoints
         self.ikControllers[zone] = neckHeadIKCtrList
 
+    def autoLeg(self, side, zone='leg'):
+        """
+        # TODO: zone out of args?
+        auto build a ik fk leg
+        Args:
+            side: left or right
+            zone: leg
+        """
+        legJoints = [point for point in pm.ls() if re.match('^%s.*(leg).*%s.*joint$' % (self.chName, side), str(point))]
+        logger.debug('%s joints: %s' % (side, legJoints))
+
+        # fk controllers are copies of leg joints
+        # save controllers name
+        legFkControllersList = []
+        legIkControllerList = []
+        legIkJointList = []
+
+        NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
+        # duplicate joints
+        for i in legJoints:
+            controllerName = str(i).split('_')[1]
+            legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
+            legIkJointList.append(i.duplicate(po=True, name='%s_ik_joint_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
+            NameIdList.append(controllerName)
+
+        legIkJointList[0].setRotation((0,0,0))
+        # reconstruct hierarchy
+        # create Fk control shapes
+        for i, fkCtr in enumerate(legFkControllersList[:-1]):  # last controller does not has shape
+            # ik hierarchy
+            legIkJointList[i].addChild(legIkJointList[i + 1])
+
+            fkCtr.addChild(legFkControllersList[i+1])
+            # fk controls
+            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]))
+            # parentShape
+            fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
+            # delete shape transform
+            pm.delete(shapeFkTransform)
+
+        # ik control
+        legIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone))
+        # delete shape transform
+        legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
+        # save to list
+        legIkControllerList.append(legIkControl)
+
+        # set prefered angle
+        legIkJointList[1].preferredAngleZ.set(-15)
+        # ik solver
+        # ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
+        # legIkControl.addChild(ikHandle)
+        # create poles
+        legPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
+        relocatePole(legPoleController, legIkJointList, 20)
+        # constraint poleVector
+        # pm.poleVectorConstraint(legPoleController, ikHandle)
+
+
+        # set world as parent
+        legFkControllersList[0].setParent(w=True)
+        # roots
+        createRoots(*legFkControllersList)
+
+
     def createController(self, name, controllerType, s=1.0, colorIndex=4):
         """
         Args:
@@ -548,6 +615,35 @@ class autoRig(object):
 #######
 #utils#
 #######
+def relocatePole(pole, joints, distance=1):
+    """
+    relocate pole position for pole vector
+    at the moment, valid for 3 joints.
+    not calculate rotation
+    TODO: calculate rotation. matrix transform
+    Args:
+        pole: PyNode of pole
+        joints: list of joints, pm nodes
+    """
+    # first vector
+    position1 = joints[0].getTranslation('world')
+    position2 = joints[1].getTranslation('world')
+    vector1 = OpenMaya.MVector(position2[0]-position1[0],position2[1]-position1[1],position2[2]-position1[2])
+    vector1.normalize()
+
+   # second vector
+    position1 = joints[-1].getTranslation('world')
+    position2 = joints[-2].getTranslation('world')
+    vector2 = OpenMaya.MVector(position2[0]-position1[0],position2[1]-position1[1],position2[2]-position1[2])
+    vector2.normalize()
+
+    poleVector = (vector1 + vector2)
+    poleVector.normalize()
+    poleVector = poleVector * distance
+    positionPoleVector = [poleVector.x + position2[0], poleVector.y + position2[1], poleVector.z + position2[2]]
+
+    pole.setTranslation(positionPoleVector, 'world')
+
 def createRoots(*args):
     roots = []
     for arg in args:
