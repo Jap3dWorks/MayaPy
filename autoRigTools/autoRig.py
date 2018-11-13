@@ -537,6 +537,7 @@ class autoRig(object):
     def autoLeg(self, side, zone='leg'):
         """
         # TODO: zone out of args?
+        # TODO: organitze and optimize this method
         auto build a ik fk leg
         Args:
             side: left or right
@@ -549,36 +550,28 @@ class autoRig(object):
         # save controllers name
         legFkControllersList = []
         legIkControllerList = []
+        legMainJointList = []
         legIkJointList = []
 
         NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
+
         # duplicate joints
-
-        for i, joint in enumerate(legJoints):
-            controllerName = str(joint).split('_')[1]
-            if i == 0:
-                # TODO: script better
-                # first duplicate, delete foot, and list rest of joints
-                # if i duplicate every joint and then reconstruct hierarchy,
-                # ikHandle makes a little displacement
-                legFkControllers = joint.duplicate()[0]
-                legFkControllers = pm.ls(legFkControllers, dag=True)
-                pm.delete(legFkControllers[len(legJoints)])
-                legFkControllersList = [j for n, j in enumerate(legFkControllers) if n < len(legJoints)]
-                print ('leg fk controllers: %s' % legFkControllersList)
-
-                legIkJoint = joint.duplicate()[0]
-                legIkJoint = pm.ls(legIkJoint, dag=True)
-                pm.delete(legIkJoint[len(legJoints)])
-                legIkJointList = [j for n, j in enumerate(legIkJoint) if n < len(legJoints)]
-
-            legFkControllersList[i].rename('%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))
-            legIkJointList[i].rename('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))
+        for i in legJoints:
+            controllerName = str(i).split('_')[1]
+            legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
+            legIkJointList.append(i.duplicate(po=True, name='%s_ik_joint_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+            legMainJointList.append(i.duplicate(po=True, name='%s_main_joint_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
             NameIdList.append(controllerName)
 
         # reconstruct hierarchy
         # create Fk control shapes
         for i, fkCtr in enumerate(legFkControllersList[:-1]):  # last controller does not has shape
+            # ik hierarchy
+            legIkJointList[i].addChild(legIkJointList[i + 1])
+            # main hierarchy
+            legMainJointList[i].addChild(legMainJointList[i+1])
+
+            fkCtr.addChild(legFkControllersList[i+1])
             # fk controls
             shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]))
             # parentShape
@@ -588,29 +581,67 @@ class autoRig(object):
 
         # ik control
         legIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone))
-        # delete shape transform
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
+        self.ctrGrp.addChild(legIkControl)  # parent to ctr group
+        createRoots(legIkControl)
         # save to list
         legIkControllerList.append(legIkControl)
+
+        # fkRoots
+        createRoots(*legFkControllersList)
 
         # set prefered angle
         legIkJointList[1].preferredAngleZ.set(-15)
         # ik solver
         ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
+        ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zone, side))
         legIkControl.addChild(ikHandle)
         # create poles
         legPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
-        relocatePole(legPoleController, legIkJointList, 20)
+        relocatePole(legPoleController, legIkJointList, 35)
+        legIkControl.addChild(legPoleController)
         # constraint poleVector
         pm.poleVectorConstraint(legPoleController, ikHandle)
+
         # root poleVector
         createRoots(legPoleController)
 
+        # main blending
+        # unknown node to store blend info
+        ikFkNode = pm.createNode('unknown', name='%s_%s_%s_attr' % (self.chName, zone, side))
+        pm.addAttr(ikFkNode, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=0.0, k=True)
+        # message node
+        pm.addAttr(ikFkNode, at='message', ln='ikFkMessage', shortName='ikFkMessage')
 
-        # set world as parent
-        legFkControllersList[0].setParent(w=True)
-        # roots
-        createRoots(*legFkControllersList)
+        plusMinusIkFk = pm.createNode('plusMinusAverage', name='%s_ikFk_blending_%s_%s_plusMinusAverage' % (self.chName, zone, side))
+        ikFkNode.ikFk.connect(plusMinusIkFk.input1D[1])
+        plusMinusIkFk.input1D[0].set(1)
+        plusMinusIkFk.operation.set(2)
+
+        # iterate along main joints
+        # todo: visibility
+        for i, joint in enumerate(legMainJointList):
+            # connect messages
+            pm.addAttr(legFkControllersList[i], at='message', ln='ikFkMessage', shortName='ikFkMessage')
+            ikFkNode.ikFkMessage.connect(legFkControllersList[i].ikFkMessage)
+
+            orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+            ikFkNode.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
+            ikFkNode.ikFk.connect(legIkJointList[i].visibility)
+
+            plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(legFkControllersList[i])))
+            plusMinusIkFk.output1D.connect(legFkControllersList[i].visibility)
+
+            lockAndHideAttr(legFkControllersList[i], True, False, False)
+            pm.setAttr('%s.radi' % legFkControllersList[i], channelBox=False, keyable=False)
+
+            # connect to deform skeleton
+            parentConstraint = pm.parentConstraint(joint, legJoints[i], maintainOffset=True, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+
+        # ik blending controller attr
+        ikFkNode.ikFk.connect(legIkControl.visibility)
+        pm.addAttr(legIkControl, at='message', ln='ikFkMessage', shortName='ikFkMessage')
+        ikFkNode.ikFkMessage.connect(legIkControl.ikFkMessage)
 
 
     def createController(self, name, controllerType, s=1.0, colorIndex=4):
@@ -621,6 +652,12 @@ class autoRig(object):
         """
         controller = pm.PyNode(ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s, colorIndex))
         controller.rename(name)
+
+        shapes = controller.listRelatives(s=True)
+        # hide shape attr
+        for shape in shapes:
+            for attr in ('aiRenderCurve', 'aiCurveWidth', 'aiSampleRate', 'aiCurveShaderR', 'aiCurveShaderG', 'aiCurveShaderB'):
+                pm.setAttr('%s.%s' % (str(shape), attr), channelBox=False, keyable=False)
 
         logger.debug('controller %s' % controller)
         return controller
@@ -663,8 +700,6 @@ def relocatePole(pole, joints, distance=1):
     yVector = poleVector ^ xVector
     yVector.normalize()
 
-    # positionPoleVector = [poleVector.x + position2[0], poleVector.y + position2[1], poleVector.z + position2[2]]
-
     pole.setTransformation([xVector.x, xVector.y, xVector.z, 0, yVector.x, yVector.y, yVector.z, 0, poleVector.x, poleVector.y, poleVector.z, 0,
                        poleVector.x * distance + position2[0], poleVector.y * distance + position2[1], poleVector.z * distance + position2[2],
                       1])
@@ -676,8 +711,12 @@ def createRoots(*args):
             parent = arg.firstParent()
         except:
             parent = None
+        # review: transformation matrix is giving bad results. it seems space errors
         rootGrp = pm.group(em=True, name='%s_root' % arg)
         rootGrp.setTranslation(arg.getTranslation('world'), 'world')
+        rootGrp.setRotation(arg.getRotation('world'), 'world')
+        rootGrp.setScale(arg.getScale())
+
         if parent:
             parent.addChild(rootGrp)
         rootGrp.addChild(arg)
