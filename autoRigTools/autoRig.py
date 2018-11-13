@@ -124,8 +124,8 @@ class autoRig(object):
                 self.ctrGrp.addChild(spineFKControllerList[0])
 
         # create roots grp
-        createRoots(*spineFKControllerList)
-        spineControllerRootsList = createRoots(*spineIKControllerList)
+        createRoots(spineFKControllerList)
+        spineControllerRootsList = createRoots(spineIKControllerList)
 
         """
         # middle controller pointConstraint, chest and hips controllers
@@ -359,8 +359,8 @@ class autoRig(object):
         self.ikControllers['spine'][-1].addChild(neckHeadFKCtrList[-1])
 
         # create roots grp
-        neckHeadFKCtrRoots = createRoots(*neckHeadFKCtrList)
-        neckHeadIKCtrRoots = createRoots(*neckHeadIKCtrList)
+        neckHeadFKCtrRoots = createRoots(neckHeadFKCtrList)
+        neckHeadIKCtrRoots = createRoots(neckHeadIKCtrList)
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
         for neckHeadFKCtr in neckHeadFKCtrList:
             lockAndHideAttr(neckHeadFKCtr, True, False, False)
@@ -543,6 +543,7 @@ class autoRig(object):
             side: left or right
             zone: leg
         """
+        fkColor = 14 if side =='left' else 29
         legJoints = [point for point in pm.ls() if re.match('^%s.*(leg).*%s.*joint$' % (self.chName, side), str(point))]
         logger.debug('%s joints: %s' % (side, legJoints))
 
@@ -573,22 +574,23 @@ class autoRig(object):
 
             fkCtr.addChild(legFkControllersList[i+1])
             # fk controls
-            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]))
+            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]),1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
             pm.delete(shapeFkTransform)
 
         # ik control
-        legIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone))
+        legIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone),1,17)
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(legIkControl)  # parent to ctr group
-        createRoots(legIkControl)
         # save to list
         legIkControllerList.append(legIkControl)
+        createRoots(legIkControllerList)
 
         # fkRoots
-        createRoots(*legFkControllersList)
+        createRoots(legFkControllersList)
+        createRoots(legFkControllersList, 'auto')
 
         # set prefered angle
         legIkJointList[1].preferredAngleZ.set(-15)
@@ -604,7 +606,7 @@ class autoRig(object):
         pm.poleVectorConstraint(legPoleController, ikHandle)
 
         # root poleVector
-        createRoots(legPoleController)
+        createRoots([legPoleController])
 
         # main blending
         # unknown node to store blend info
@@ -704,18 +706,18 @@ def relocatePole(pole, joints, distance=1):
                        poleVector.x * distance + position2[0], poleVector.y * distance + position2[1], poleVector.z * distance + position2[2],
                       1])
 
-def createRoots(*args):
+def createRoots(list, sufix='root'):
     roots = []
-    for arg in args:
+    for arg in list:
         try:
             parent = arg.firstParent()
         except:
             parent = None
-        # review: transformation matrix is giving bad results. it seems space errors
-        rootGrp = pm.group(em=True, name='%s_root' % arg)
-        rootGrp.setTranslation(arg.getTranslation('world'), 'world')
-        rootGrp.setRotation(arg.getRotation('world'), 'world')
-        rootGrp.setScale(arg.getScale())
+        # explanation: pm getTransformation gives transform matrix in object space.
+        # so we need to use pm.xform()
+        rootGrp = pm.group(em=True, name='%s_%s' % (arg, sufix))
+        matrixTransform = pm.xform(arg, q=True, ws=True, m=True)
+        pm.xform(rootGrp, ws=True, m=matrixTransform)
 
         if parent:
             parent.addChild(rootGrp)
