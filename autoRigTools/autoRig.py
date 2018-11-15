@@ -9,6 +9,8 @@ logger = logging.getLogger('autoRig:')
 logger.setLevel(logging.DEBUG)
 
 # TODO: IK fK lower case
+# TODO: ikfk attr leg, in a instanced shape (mail al tutor)
+# TODO: neck twist odd, skinning problem?
 
 class autoRig(object):
     def __init__(self, chName='akona', path='D:\_docs\_Animum\Akona'):
@@ -42,7 +44,6 @@ class autoRig(object):
         """
             Auto create a character spine
         """
-        # TODO: check spine list sort, by hierarchy descending
         # detect spine joints and their positions
         spineJoints = [point for point in pm.ls() if re.match('^%s.*((hips)|(spine)|(chest)).*joint$' % self.chName, str(point))]
         positions = [point.getTranslation(space='world') for point in spineJoints]
@@ -79,16 +80,10 @@ class autoRig(object):
             spineDrvList.append(spineDriver)
 
             # create controller and parent locator
-            # TODO: numeration of controllers is wrong
-            spineController = self.createController('%s_IK_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
+            spineController = self.createController('%s_ik_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
             logger.debug('spine controller: %s' % spineController)
 
-            # try make chest deform more "natural"
-            if n == spineCurve.numCVs()-1:
-                lastSpineIkController = spineIKControllerList[1].getTranslation('world')
-                spineController.setTranslation((lastSpineIkController[0], point[1], lastSpineIkController[2]))
-            else:
-                spineController.setTranslation(point)
+            spineController.setTranslation(point)
 
             spineController.addChild(spineDriver)
             spineIKControllerList.append(spineController)
@@ -101,7 +96,7 @@ class autoRig(object):
             if n < 3:
                 # first fk controller bigger
                 fkCtrSize = 1.5 if len(spineFKControllerList) == 0 else 1
-                spineFKController = self.createController('%s_FK_spine_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
+                spineFKController = self.createController('%s_fk_spine_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
                 spineFKController.setTranslation(point)
                 spineFKControllerList.append(spineFKController)
 
@@ -126,17 +121,6 @@ class autoRig(object):
         # create roots grp
         createRoots(spineFKControllerList)
         spineControllerRootsList = createRoots(spineIKControllerList)
-
-        """
-        # middle controller pointConstraint, chest and hips controllers
-        pointGrp = pm.group(empty=True, name='%s_pointCostraint_%s_1_grp' % (self.chName, zone))
-        middleOffsetGrp = spineControllerRootsList[len(spineControllerRootsList)//2]
-        middleOffsetGrpParent = middleOffsetGrp.firstParent()
-        middleOffsetGrpParent.addChild(pointGrp)
-
-        pm.pointConstraint(spineIKControllerList[1], spineIKControllerList[-2], pointGrp, maintainOffset=True, name='%s_pointCostraint_%s_1_pointCostraint' % (self.chName, zone))
-        pointGrp.addChild(middleOffsetGrp)
-        """
 
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
         for neckHeadIKCtr in spineFKControllerList[1:]:
@@ -310,9 +294,9 @@ class autoRig(object):
 
         for n, point in enumerate(neckHeadCurve.getCVs()):
             # create drivers to manipulate the curve
-            neckHeadDriver = pm.group(name='%s_Curve_%s_%s_drv' % (self.chName, zone, n+1), empty=True)
+            neckHeadDriver = pm.group(name='%s_curve_%s_%s_drv' % (self.chName, zone, n+1), empty=True)
             neckHeadDriver.setTranslation(point)
-            # use the worldMatrix TODO: rename better no neckhead_3 -> head_1
+            # use the worldMatrix
             decomposeMatrix = pm.createNode('decomposeMatrix', name='%s_%s_%s_decomposeMatrix' % (self.chName,zone, n+1))
             neckHeadDriver.worldMatrix[0].connect(decomposeMatrix.inputMatrix)
             decomposeMatrix.outputTranslate.connect(neckHeadCurve.controlPoints[n])
@@ -331,17 +315,17 @@ class autoRig(object):
                 # try make head deform more "natural"
                 if n == neckHeadCurve.numCVs() - 1:
                     lastSpineIkController = neckHeadIKCtrList[-1].getTranslation('world')
-                    neckHeadIKCtr.setTranslation((lastSpineIkController[0], point[1], lastSpineIkController[2]))
+                    neckHeadIKCtr.setTranslation((point[0], point[1], point[2]))
                 else:
-                    neckHeadIKCtr.setTranslation(point)
+                    neckHeadIKCtr.setTranslation(neckHeadJoints[1].getTranslation('world'), 'world')  # controller and joint same position
 
                 neckHeadIKCtr.addChild(neckHeadDriver)
                 neckHeadIKCtrList.append(neckHeadIKCtr)  # add to ik controller List
 
                 # create FK controllers, only with the first ik controller
                 if len(neckHeadIKCtrList) == 1:
-                    neckHeadFKCtr = self.createController('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'hipsFk',.5,4)
-                    neckHeadFKCtr.setTranslation(point)
+                    neckHeadFKCtr = self.createController('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'neckFk',1,4)
+                    neckHeadFKCtr.setTranslation(neckHeadJoints[1].getTranslation('world'), 'world')
                     neckHeadFKCtrList.append(neckHeadFKCtr)
                     # Fk hierarchy, if we have more fk controllers. not the case
                     if len(neckHeadFKCtrList) > 1:
@@ -505,7 +489,6 @@ class autoRig(object):
 
             else:
                 pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
-
 
             multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
             multiplyDivide.operation.set(2)
