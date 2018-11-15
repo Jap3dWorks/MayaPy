@@ -582,6 +582,7 @@ class autoRig(object):
 
         # ik control
         legIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone),1,17)
+        # pm.xform(legIkControl, ws=True, m=pm.xform(legJoints[-1], q=True, ws=True, m=True))
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(legIkControl)  # parent to ctr group
         # save to list
