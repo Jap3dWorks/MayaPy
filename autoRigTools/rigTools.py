@@ -20,7 +20,7 @@ def snapIkFkLeg(name, zone, side):
     """
     quaternionOffset = pm.datatypes.Quaternion(0.511546727083, -0.488180239267, -0.511546727083, 0.488180239267)
     logger.debug('quaternionOffset : %s, %s, %s, %s ' % (quaternionOffset.x, quaternionOffset.y, quaternionOffset.z, quaternionOffset.w))
-    ikFkNode = pm.PyNode('%s_%s_%s_attr' % (name, zone, side))
+    ikFkNode = pm.PyNode('%s_%s_%s_attrShape' % (name, zone, side))
     # find fk Controllers
     # review: it's is a little stupid ask for the zone and then put upperleg manually
     fkControllers = [i for i in pm.ls() if re.match('^%s_fk_%s_%s_((upperleg)|(lowerleg)|(leg))_ctr$' % (name, zone, side), str(i))]
