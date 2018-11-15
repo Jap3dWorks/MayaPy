@@ -9,7 +9,6 @@ logger = logging.getLogger('autoRig:')
 logger.setLevel(logging.DEBUG)
 
 # TODO: IK fK lower case
-# TODO: ikfk attr leg, in a instanced shape (mail al tutor)
 # TODO: neck twist odd, skinning problem?
 
 class autoRig(object):
@@ -568,6 +567,12 @@ class autoRig(object):
         # pm.xform(legIkControl, ws=True, m=pm.xform(legJoints[-1], q=True, ws=True, m=True))
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(legIkControl)  # parent to ctr group
+
+        # organitze outliner
+        self.ikControllers['spine'][0].addChild(legFkControllersList[0])
+        self.ikControllers['spine'][0].addChild(legMainJointList[0])
+        self.ikControllers['spine'][0].addChild(legIkJointList[0])
+
         # save to list
         legIkControllerList.append(legIkControl)
         createRoots(legIkControllerList)
@@ -576,7 +581,7 @@ class autoRig(object):
         createRoots(legFkControllersList)
         createRoots(legFkControllersList, 'auto')
 
-        # set prefered angle
+        # set preferred angle
         legIkJointList[1].preferredAngleZ.set(-15)
         # ik solver
         ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
@@ -594,10 +599,14 @@ class autoRig(object):
 
         # main blending
         # unknown node to store blend info
-        ikFkNode = pm.createNode('unknown', name='%s_%s_%s_attr' % (self.chName, zone, side))
-        pm.addAttr(ikFkNode, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=0.0, k=True)
-        # message node
-        pm.addAttr(ikFkNode, at='message', ln='ikFkMessage', shortName='ikFkMessage')
+        # locator shape instanced version
+        ikFkNode = pm.spaceLocator(name='%s_%s_%s_attr' % (self.chName, zone, side))
+        ikFkshape = ikFkNode.getShape()
+        pm.addAttr(ikFkshape, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=0.0, k=True)
+        # hide unused attributes
+        for attr in ('localPosition', 'localScale'):
+            for axis in ('X', 'Y', 'Z'):
+                pm.setAttr('%s.%s%s' % (ikFkshape, attr, axis), channelBox=False, keyable=False)
 
         plusMinusIkFk = pm.createNode('plusMinusAverage', name='%s_ikFk_blending_%s_%s_plusMinusAverage' % (self.chName, zone, side))
         ikFkNode.ikFk.connect(plusMinusIkFk.input1D[1])
@@ -607,13 +616,16 @@ class autoRig(object):
         # iterate along main joints
         # todo: visibility
         for i, joint in enumerate(legMainJointList):
-            # connect messages
-            pm.addAttr(legFkControllersList[i], at='message', ln='ikFkMessage', shortName='ikFkMessage')
-            ikFkNode.ikFkMessage.connect(legFkControllersList[i].ikFkMessage)
-
+            # attributes
             orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
             ikFkNode.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
             ikFkNode.ikFk.connect(legIkJointList[i].visibility)
+
+            # clone instanced
+            ikfkNodeInstance = ikFkNode.duplicate(instanceLeaf=True)[0]
+            # parent shape
+            legFkControllersList[i].addChild(ikfkNodeInstance.getShape(), r=True, s=True)
+            pm.delete(ikfkNodeInstance)
 
             plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(legFkControllersList[i])))
             plusMinusIkFk.output1D.connect(legFkControllersList[i].visibility)
@@ -625,9 +637,10 @@ class autoRig(object):
             parentConstraint = pm.parentConstraint(joint, legJoints[i], maintainOffset=True, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
 
         # ik blending controller attr
-        ikFkNode.ikFk.connect(legIkControl.visibility)
-        pm.addAttr(legIkControl, at='message', ln='ikFkMessage', shortName='ikFkMessage')
-        ikFkNode.ikFkMessage.connect(legIkControl.ikFkMessage)
+        ikFkshape.ikFk.connect(legIkControl.visibility)
+        # parent shape
+        legIkControl.addChild(ikFkshape, r=True, s=True)
+        pm.delete(ikFkNode)
 
 
     def createController(self, name, controllerType, s=1.0, colorIndex=4):
