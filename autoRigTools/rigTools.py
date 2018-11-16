@@ -18,64 +18,48 @@ def snapIkFkLeg(name, zone, side):
         side(str): left or right
         direction(bool): 1: ik to fk. 2: fk to ik
     """
+    # offset quaternion
+    # TODO: save quaternions offset when construct rig. 'unknown' node with attributes
     quaternionOffset = pm.datatypes.Quaternion(0.511546727083, -0.488180239267, -0.511546727083, 0.488180239267)
-    logger.debug('quaternionOffset : %s, %s, %s, %s ' % (quaternionOffset.x, quaternionOffset.y, quaternionOffset.z, quaternionOffset.w))
+
+    if side == 'right':
+        quaternionOffset = pm.datatypes.Quaternion(-0.488180239267, -0.511546727083, 0.488180239267, 0.511546727083)
+
     ikFkNode = pm.PyNode('%s_%s_%s_attrShape' % (name, zone, side))
     # find fk Controllers
     # review: it's is a little stupid ask for the zone and then put upperleg manually
-    fkControllers = [i for i in pm.ls() if re.match('^%s_fk_%s_%s_((upperleg)|(lowerleg)|(leg))_ctr$' % (name, zone, side), str(i))]
+    fkControllers = [i for i in pm.ls() if re.match('^%s_fk_%s_%s.*ctr$' % (name, zone, side), str(i))]
     logger.debug('fk controls: %s' % fkControllers)
 
     # find ik joints
-    ikJoints = [i for i in pm.ls() if re.match('^%s_ik_joint_%s_%s_((upperleg)|(lowerleg)|(leg))_joint$' % (name, zone, side), str(i))]
+    ikJoints = [i for i in pm.ls() if re.match('^%s_ik_joint_%s_%s.*joint$' % (name, zone, side), str(i))]
     logger.debug('ik joints: %s' % ikJoints)
+
     # find ik control
-    ikControl = pm.PyNode('%s_ik_%s_%s_ctr' % (name, zone, side))
+    try:
+        ikControl = pm.PyNode('%s_ik_%s_%s_ctr' % (name, zone, side))
+
+    except:
+        return logger.info('does not found: %s_ik_%s_%s_ctr' % (name, zone, side))
 
     # ik to fk
     if not ikFkNode.ikFk.get():
         # poleVector
         poleVector = pm.PyNode('%s_ik_%s_%s_pole_ctr' % (name, zone, side))
 
-        # rotation offset
-        mquaternion = fkControllers[-1].getRotation(space='world', quaternion=True)
-        logger.debug('mquaternion : %s, %s, %s, %s ' % (mquaternion.x, mquaternion.y, mquaternion.z, mquaternion.w))
+        #rotation offset
+        #mquaternion = fkControllers[-1].getRotation(space='world', quaternion=True)
+        #logger.debug('mquaternion : %s, %s, %s, %s ' % (mquaternion.x, mquaternion.y, mquaternion.z, mquaternion.w))
         #mquaternion.invertIt()
         #logger.debug('mquaternion : %s, %s, %s, %s ' % (mquaternion.x, mquaternion.y, mquaternion.z, mquaternion.w))
 
-        fkFootRot = fkControllers[-1].getRotation('world')
-        ikFootRot = ikControl.getRotation('world')
-
-        # ikRotOffset = fkFootRot - ikFootRot
-        # logger.debug('ik control foot offset: %s, %s, %s' % (ikRotOffset.x, ikRotOffset.y, ikRotOffset.z))
-
-        # ikRotOffset = OpenMaya.MEulerRotation(1.57079632679, 0.0467372293198, -1.57079632679)
-
-
         # setTransforms
-        quaternionOffset.invertIt()
-        # pm.xform(ikControl, ws=True, m=pm.xform(fkControllers[-1], q=True, ws=True, m=True))
         ikControl.setTranslation(fkControllers[-1].getTranslation('world'), 'world')
-
-        quat01 = quaternionOffset*fkControllers[-1].getRotation(space='world', quaternion=True)
-        logger.debug('quat01 : %s, %s, %s, %s ' % (quat01.x, quat01.y, quat01.z, quat01.w))
-        quat02 = fkControllers[-1].getRotation(space='world', quaternion=True) * quaternionOffset
-        logger.debug('quat02 : %s, %s, %s, %s ' % (quat02.x, quat02.y, quat02.z, quat02.w))
-
-        quat01.invertIt()
-        logger.debug('quat01 invert : %s, %s, %s, %s ' % (quat01.x, quat01.y, quat01.z, quat01.w))
-        quat02.invertIt()
-        logger.debug('quat02 : %s, %s, %s, %s ' % (quat02.x, quat02.y, quat02.z, quat02.w))
-
-
-
+        # setRotation quaternion
+        quaternionOffset.invertIt()
         ikControl.setRotation(quaternionOffset*fkControllers[-1].getRotation(space='world', quaternion=True), 'world')
-
-
-
-        # ikControl.setRotation(quaternionOffset, 'world')
-
-        #ikControl.setScale(fkControllers[-1].getScale())
+        # setScale
+        # ikControl.setScale(fkControllers[-1].getScale())
 
         # set ikfk attr
         ikFkNode.ikFk.set(1)
@@ -94,11 +78,15 @@ def snapIkFkLeg(name, zone, side):
         # set polevector position
         poleVector.setTranslation(pvVector * 25 + kneePoss, 'world')
 
+        return
+
     # fk to ik
     if ikFkNode.ikFk.get():
-        pass
+        for i, fkCntr in enumerate(fkControllers):
+            fkCntr.setRotation(ikJoints[i].getRotation('world'), 'world')
 
-
+        ikFkNode.ikFk.set(0)
+        return
 
 
 def snapIsolateHead(name, zone, controller, point, orient, isolate):

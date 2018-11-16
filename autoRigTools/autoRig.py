@@ -526,7 +526,7 @@ class autoRig(object):
             zone: leg
         """
         fkColor = 14 if side =='left' else 29
-        legJoints = [point for point in pm.ls() if re.match('^%s.*(leg).*%s.*joint$' % (self.chName, side), str(point))]
+        legJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).*%s.*joint$' % (self.chName, side), str(point))]
         logger.debug('%s joints: %s' % (side, legJoints))
 
         # fk controllers are copies of leg joints
@@ -556,7 +556,7 @@ class autoRig(object):
 
             fkCtr.addChild(legFkControllersList[i+1])
             # fk controls
-            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]),1, fkColor)
+            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]), 1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
@@ -589,8 +589,8 @@ class autoRig(object):
         legIkControl.addChild(ikHandle)
         # create poles
         legPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
-        relocatePole(legPoleController, legIkJointList, 35)
-        legIkControl.addChild(legPoleController)
+        relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
+        self.ikControllers['spine'][0].addChild(legPoleController)
         # constraint poleVector
         pm.poleVectorConstraint(legPoleController, ikHandle)
 
@@ -634,12 +634,165 @@ class autoRig(object):
             pm.setAttr('%s.radi' % legFkControllersList[i], channelBox=False, keyable=False)
 
             # connect to deform skeleton
-            parentConstraint = pm.parentConstraint(joint, legJoints[i], maintainOffset=True, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+            parentConstraint = pm.orientConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
 
         # ik blending controller attr
+        ikFkshape.ikFk.connect(legPoleController.visibility)
         ikFkshape.ikFk.connect(legIkControl.visibility)
         # parent shape
         legIkControl.addChild(ikFkshape, r=True, s=True)
+        pm.delete(ikFkNode)
+
+    def autoArm(self, side, zone='arm'):
+        """
+        # TODO: zone out of args?
+        # TODO: organize and optimize this method
+        auto build a ik fk arm
+        Args:
+            side: left or right
+            zone: arm
+        """
+        fkColor = 14 if side == 'left' else 29
+        armJoints = [point for point in pm.ls() if re.match('^%s.*([aA]rm).*%s.*joint$' % (self.chName, side), str(point))]
+        clavicleJoints = [point for point in pm.ls() if re.match('^%s.*(clavicle).*%s.*joint$' % (self.chName, side), str(point))]
+        logger.debug('%s joints: %s' % (side, armJoints))
+
+        # fk controllers are copies of arm joints
+        # save controllers name
+        armFkControllersList = []
+        clavicleControllerList = []
+        armIkControllerList = []
+        armMainJointList = []
+        armIkJointList = []
+
+        NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
+
+        # duplicate joints
+        # todo: conenct clavicle deform
+        for joint in armJoints:
+            controllerName = str(joint).split('_')[1]
+            armFkControllersList.append(joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
+            armIkJointList.append(joint.duplicate(po=True, name='%s_ik_joint_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+            armMainJointList.append(joint.duplicate(po=True, name='%s_main_joint_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+
+            NameIdList.append(controllerName)
+
+        # duplicate clavicle
+        for joint in clavicleJoints:
+            controllerName = str(joint).split('_')[1]
+            clavicleControllerList.append(joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
+            NameIdList.append(controllerName)
+
+        # reconstruct hierarchy
+        # create Fk control shapes
+        for i, fkCtr in enumerate(armFkControllersList[:-1]):  # last controller does not has shape
+            # ik hierarchy
+            armIkJointList[i].addChild(armIkJointList[i + 1])
+            # main hierarchy
+            armMainJointList[i].addChild(armMainJointList[i+1])
+
+            fkCtr.addChild(armFkControllersList[i+1])
+            # fk controls
+            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]),1, fkColor)
+            # parentShape
+            fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
+            # delete shape transform
+            pm.delete(shapeFkTransform)
+
+        # ik control
+        armIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%s_%sIk' % (side, zone), 1, 17)
+        pm.xform(armIkControl, ws=True, m=pm.xform(armJoints[-1], q=True, ws=True, m=True))
+        #legIkControl.setTranslation(armJoints[-1].getTranslation('world'), 'world')
+        self.ctrGrp.addChild(armIkControl)  # parent to ctr group
+
+        # clavicle fk control
+        for i, fkCtr in enumerate(clavicleControllerList):  # last controller does not has shape
+            # fk controls
+            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[-1]),1, fkColor)
+            # parentShape
+            fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
+            # delete shape transform
+            pm.delete(shapeFkTransform)
+
+        # organitze outliner
+        self.ikControllers['spine'][-1].addChild(clavicleControllerList[0])
+        clavicleControllerList[-1].addChild(armFkControllersList[0])
+        clavicleControllerList[-1].addChild(armMainJointList[0])
+        clavicleControllerList[-1].addChild(armIkJointList[0])
+
+        # save to list
+        armIkControllerList.append(armIkControl)
+        createRoots(armIkControllerList)
+
+        # fkRoots
+        createRoots(armFkControllersList)
+        createRoots(armFkControllersList, 'auto')
+
+        # set preferred angle
+        armIkJointList[1].preferredAngleZ.set(-15)
+        # ik solver, clavicle out of ik control
+        ikHandle, ikEffector = pm.ikHandle(startJoint=armIkJointList[0], endEffector=armIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
+        ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zone, side))
+        armIkControl.addChild(ikHandle)
+        # create poles
+        armPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
+        relocatePole(armPoleController, armIkJointList, 35)  # relocate pole Vector
+        self.ikControllers['spine'][-1].addChild(armPoleController)
+        # constraint poleVector
+        pm.poleVectorConstraint(armPoleController, ikHandle)
+
+        # root poleVector
+        createRoots([armPoleController])
+
+        # main blending
+        # unknown node to store blend info
+        # locator shape instanced version
+        ikFkNode = pm.spaceLocator(name='%s_%s_%s_attr' % (self.chName, zone, side))
+        ikFkshape = ikFkNode.getShape()
+        pm.addAttr(ikFkshape, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=0.0, k=True)
+        # hide unused attributes
+        for attr in ('localPosition', 'localScale'):
+            for axis in ('X', 'Y', 'Z'):
+                pm.setAttr('%s.%s%s' % (ikFkshape, attr, axis), channelBox=False, keyable=False)
+
+        plusMinusIkFk = pm.createNode('plusMinusAverage', name='%s_ikFk_blending_%s_%s_plusMinusAverage' % (self.chName, zone, side))
+        ikFkNode.ikFk.connect(plusMinusIkFk.input1D[1])
+        plusMinusIkFk.input1D[0].set(1)
+        plusMinusIkFk.operation.set(2)
+
+        # iterate along main joints
+        # todo: visibility
+        for i, joint in enumerate(armMainJointList):
+            # attributes  fk +1 because clavicle
+            orientConstraint = pm.orientConstraint(armIkJointList[i], armFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+            ikFkNode.ikFk.connect(orientConstraint.attr('%sW0' % str(armIkJointList[i])))
+            ikFkNode.ikFk.connect(armIkJointList[i].visibility)
+
+            # clone instanced
+            ikfkNodeInstance = ikFkNode.duplicate(instanceLeaf=True)[0]
+            # parent shape
+            armFkControllersList[i].addChild(ikfkNodeInstance.getShape(), r=True, s=True)
+            pm.delete(ikfkNodeInstance)
+
+            plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(armFkControllersList[i])))
+            plusMinusIkFk.output1D.connect(armFkControllersList[i].visibility)
+
+            lockAndHideAttr(armFkControllersList[i], True, False, False)
+            pm.setAttr('%s.radi' % armFkControllersList[i], channelBox=False, keyable=False)
+
+            # connect to deform skeleton
+            armParentConstraint = pm.orientConstraint(joint, armJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+
+        # clavicle contraint
+        clavicleOrientConstraint = pm.orientConstraint(clavicleControllerList[0], clavicleJoints[0], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+        claviclePointConstraint = pm.pointConstraint(clavicleControllerList[0], clavicleJoints[0], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+
+
+        # ik blending controller attr
+        ikFkshape.ikFk.connect(armPoleController.visibility)
+        ikFkshape.ikFk.connect(armIkControl.visibility)
+        # parent shape
+        armIkControl.addChild(ikFkshape, r=True, s=True)
         pm.delete(ikFkNode)
 
 

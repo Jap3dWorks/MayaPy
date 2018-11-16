@@ -16,7 +16,7 @@ def spine_head_leg_akona():
     akonaRig.autoNeckHead()
     akonaRig.autoLeg('left')
     akonaRig.autoLeg('right')
+    akonaRig.autoArm('left')
 
-
-    # cmds.parentConstraint('akona_IK_spine_chest_1_ctr','akona_clavicle_left_joint1', maintainOffset=True)
-    # cmds.parentConstraint('akona_IK_spine_chest_1_ctr','akona_clavicle_right_joint1', maintainOffset=True)
+    # cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_left_joint', maintainOffset=True)
+    # cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_right_joint', maintainOffset=True)
