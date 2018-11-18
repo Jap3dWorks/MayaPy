@@ -15,45 +15,7 @@ logger.setLevel(logging.DEBUG)
 
 class RigAuto(object):
 
-    class MethodsDecorator(object):
-        @classmethod
-        def checker_auto(self, func):
-            # store func name
-            # here we have the zone defined
-            funcName = func.__name__.replace('_auto', '')
-            # start wrapper
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                # check if node exist
-
-                # check if side is in args
-                sideCheck = 'left' if 'left' in args else 'right' if 'right' in args else None
-                sideCheck = kwargs['side'] if 'side' in kwargs else sideCheck
-
-                moduleSide = '%s_module' % sideCheck if sideCheck else 'module'
-
-                # check if module allready exists
-                try:
-                    moduleNode = pm.PyNode('%s_%s_%s' % (RigAuto.chName, funcName, moduleSide))
-                except:
-                    moduleNode = None
-
-                if moduleNode:
-                    logger.debug('%s %s module exist yet' % (RigAuto.chName, funcName))
-                    return None
-
-                # if module does not exist, run method
-                # also get info to construct the necessary nodes
-                ikControllers, fkControllers = func(*args, **kwargs)
-
-                # create unknown node
-                moduleNode = pm.createNode('unknown', name= '%s_%s_%s' % (RigAuto.chName, funcName, moduleSide))
-
-                return ikControllers, fkControllers
-
-            return wrapper
-
-    def __init__(self, chName='akona', path='D:\_docs\_Animum\Akona'):
+    def __init__(self, chName, path):
         """
         autoRig class tools
         """
@@ -83,8 +45,74 @@ class RigAuto(object):
         self.methodNames = [x[0] for x in inspect.getmembers(self, predicate=inspect.ismethod) if 'auto' in x[0]]
         print (self.methodNames)
 
+    # method decorator, check if already exist the rig part,
+    # and create the necessary attr circuity (nodes with controllers connections)
+    class checker_auto(object):
+        def __init__(self, decorated):
+            # TODO: do not understand why i need to make this
+            self._decorated = decorated
+
+        def __call__(self, func):
+            # store func name
+            # here we have the zone defined
+            funcName = func.__name__.replace('_auto', '')
+            # start wrapper
+            def wrapper(*args, **kwargs):
+                # check if node exist
+                # check if side is in args
+                chName = args[0].chName  # explanation: acces outher class attributes
+                sideCheck = 'left' if 'left' in args else 'right' if 'right' in args else None
+                sideCheck = kwargs['side'] if 'side' in kwargs else sideCheck
+
+                moduleSide = '%s_module' % sideCheck if sideCheck else 'module'
+                nodeName = '%s_%s_%s' % (chName, funcName, moduleSide)  # name of the desired node
+                # check if module allready exists
+                try:
+                    moduleNode = pm.PyNode(nodeName)
+                except:
+                    moduleNode = None
+
+                if moduleNode:
+                    logger.debug('%s %s module exist yet' % (nodeName))
+                    return None
+
+                # if module does not exist, run method
+                # also get info to construct the necessary nodes
+                totalControlList = func(*args, **kwargs)
+
+                # create unknown node
+                connectionTypes = ['ikControllers', 'fkControllers']
+                moduleNode = pm.createNode('unknown', name=nodeName)
+                pm.addAttr(moduleNode, ln='module', sn='module', attributeType='message')
+                for connection in connectionTypes:
+                    pm.addAttr(moduleNode, ln=connection, sn=connection,  attributeType='message')
+
+                for i, ctrType in enumerate(connectionTypes):
+                    for ctr in totalControlList[i]:
+                        pm.addAttr(ctr, ln='module', sn='module', attributeType='message')
+                        moduleNode.attr(ctrType).connect(ctr.module)
+
+                # connect to parent module
+                # if not exist yet, create
+                try:
+                    chModule = pm.PyNode('%s' % chName)
+                except:
+                    raise ValueError('Do not found %s elements' % chName)
+
+                # check connections
+                if not chModule.hasAttr(funcName):
+                    pm.addAttr(chModule, ln=funcName, sn=funcName, attributeType='message')
+
+                chModule.attr(funcName).connect(moduleNode.module)
+
+
+                return totalControlList
+
+            return wrapper
+
+
     # TODO: zone var in names
-    @MethodsDecorator.checker_auto
+    @checker_auto('decorated')
     def spine_auto(self, zone='spine'):
         """
             Auto create a character spine
@@ -310,7 +338,7 @@ class RigAuto(object):
         self.fkControllers[zone] = spineFKControllerList
         return spineIKControllerList, spineFKControllerList
 
-    @MethodsDecorator.checker_auto
+    @checker_auto('decorated')
     def neckHead_auto(self, zone='neckHead'):
         # store joints, not end joint
         neckHeadJoints = [point for point in pm.ls() if re.match('^%s.*(neck|head).*joint$' % self.chName, str(point))]
@@ -566,7 +594,7 @@ class RigAuto(object):
         self.fkControllers[zone] = neckHeadFKCtrList
         return neckHeadIKCtrList, neckHeadFKCtrList
 
-    @MethodsDecorator.checker_auto
+    @checker_auto('decorated')
     def leg_auto(self, side, zone='leg'):
         """
         # TODO: zone out of args?
@@ -702,11 +730,11 @@ class RigAuto(object):
         self.fkControllers[zoneSide] = legFkControllersList
         return legIkControllerList, legFkControllersList
 
-    @MethodsDecorator.checker_auto
+    @checker_auto('decorated')
     def foot_auto(self):
         pass
 
-    @MethodsDecorator.checker_auto
+    @checker_auto('decorated')
     def arm_auto(self, side, zone='arm'):
         """
         # TODO: zone out of args?

@@ -11,7 +11,7 @@ def model_import():
 def spine_head_leg_akona():
 
     reload(autoRig)
-    akonaRig = autoRig.RigAuto()
+    akonaRig = autoRig.RigAuto(chName='akona', path='D:\_docs\_Animum\Akona')
     akonaRig.spine_auto()
     akonaRig.neckHead_auto()
     akonaRig.leg_auto('left')
