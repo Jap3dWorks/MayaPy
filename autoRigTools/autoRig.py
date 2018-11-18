@@ -2,6 +2,8 @@ import pymel.core as pm
 import re
 from maya import OpenMaya
 from autoRigTools import ctrSaveLoadToJson
+import inspect
+from functools import wraps
 
 import logging
 logging.basicConfig()
@@ -11,16 +13,56 @@ logger.setLevel(logging.DEBUG)
 # TODO: IK fK lower case
 # TODO: neck twist odd, skinning problem?
 
-class autoRig(object):
+class RigAuto(object):
+
+    class MethodsDecorator(object):
+        @classmethod
+        def checker_auto(self, func):
+            # store func name
+            # here we have the zone defined
+            funcName = func.__name__.replace('_auto', '')
+            # start wrapper
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                # check if node exist
+
+                # check if side is in args
+                sideCheck = 'left' if 'left' in args else 'right' if 'right' in args else None
+                sideCheck = kwargs['side'] if 'side' in kwargs else sideCheck
+
+                moduleSide = '%s_module' % sideCheck if sideCheck else 'module'
+
+                # check if module allready exists
+                try:
+                    moduleNode = pm.PyNode('%s_%s_%s' % (RigAuto.chName, funcName, moduleSide))
+                except:
+                    moduleNode = None
+
+                if moduleNode:
+                    logger.debug('%s %s module exist yet' % (RigAuto.chName, funcName))
+                    return None
+
+                # if module does not exist, run method
+                # also get info to construct the necessary nodes
+                ikControllers, fkControllers = func(*args, **kwargs)
+
+                # create unknown node
+                moduleNode = pm.createNode('unknown', name= '%s_%s_%s' % (RigAuto.chName, funcName, moduleSide))
+
+                return ikControllers, fkControllers
+
+            return wrapper
+
     def __init__(self, chName='akona', path='D:\_docs\_Animum\Akona'):
         """
         autoRig class tools
         """
-        # TODO: node 'unknown' messages attributes to store connections?
+        # TODO: create node Module 'unknown' or chName_rig_grp transform node with messages attributes to store connections
         self.chName = chName
         self.path = path
         self.joints = {}  # store joints
         self.ikControllers = {}
+        self.fkControllers = {}
 
         # create necessary groups
         # check if noXform exist
@@ -38,8 +80,12 @@ class autoRig(object):
             self.ctrGrp = pm.group(name='%s_ctr_grp' % self.chName, empty=True)
             pm.PyNode('%s_rig_grp' % self.chName).addChild(self.ctrGrp)
 
+        self.methodNames = [x[0] for x in inspect.getmembers(self, predicate=inspect.ismethod) if 'auto' in x[0]]
+        print (self.methodNames)
+
     # TODO: zone var in names
-    def autoSpine(self, zone='spine'):
+    @MethodsDecorator.checker_auto
+    def spine_auto(self, zone='spine'):
         """
             Auto create a character spine
         """
@@ -79,7 +125,7 @@ class autoRig(object):
             spineDrvList.append(spineDriver)
 
             # create controller and parent locator
-            spineController = self.createController('%s_ik_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
+            spineController = self.create_controller('%s_ik_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
             logger.debug('spine controller: %s' % spineController)
 
             spineController.setTranslation(point)
@@ -95,7 +141,7 @@ class autoRig(object):
             if n < 3:
                 # first fk controller bigger
                 fkCtrSize = 1.5 if len(spineFKControllerList) == 0 else 1
-                spineFKController = self.createController('%s_fk_spine_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
+                spineFKController = self.create_controller('%s_fk_spine_%s_ctr' % (self.chName, n + 1), 'hipsFk', fkCtrSize, 4)
                 spineFKController.setTranslation(point)
                 spineFKControllerList.append(spineFKController)
 
@@ -261,9 +307,11 @@ class autoRig(object):
     # save data
         self.joints[zone] = spineJoints
         self.ikControllers[zone] = spineIKControllerList
+        self.fkControllers[zone] = spineFKControllerList
+        return spineIKControllerList, spineFKControllerList
 
-
-    def autoNeckHead(self, zone='neckHead'):
+    @MethodsDecorator.checker_auto
+    def neckHead_auto(self, zone='neckHead'):
         # store joints, not end joint
         neckHeadJoints = [point for point in pm.ls() if re.match('^%s.*(neck|head).*joint$' % self.chName, str(point))]
         logger.debug('Neck head joints: %s' % neckHeadJoints)
@@ -308,7 +356,7 @@ class autoRig(object):
             if n > 1 and not n == neckHeadCurve.numCVs()-2:
                 # create controller and parent drivers to controllers
                 ctrType = 'neck' if not len(neckHeadIKCtrList) else 'head'
-                neckHeadIKCtr = self.createController('%s_IK_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
+                neckHeadIKCtr = self.create_controller('%s_IK_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
                 logger.debug('neckHead controller: %s' % neckHeadIKCtr)
 
                 # try make head deform more "natural"
@@ -323,7 +371,7 @@ class autoRig(object):
 
                 # create FK controllers, only with the first ik controller
                 if len(neckHeadIKCtrList) == 1:
-                    neckHeadFKCtr = self.createController('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'neckFk',1,4)
+                    neckHeadFKCtr = self.create_controller('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'neckFk',1,4)
                     neckHeadFKCtr.setTranslation(neckHeadJoints[1].getTranslation('world'), 'world')
                     neckHeadFKCtrList.append(neckHeadFKCtr)
                     # Fk hierarchy, if we have more fk controllers. not the case
@@ -515,8 +563,11 @@ class autoRig(object):
         # save data
         self.joints[zone] = neckHeadJoints
         self.ikControllers[zone] = neckHeadIKCtrList
+        self.fkControllers[zone] = neckHeadFKCtrList
+        return neckHeadIKCtrList, neckHeadFKCtrList
 
-    def autoLeg(self, side, zone='leg'):
+    @MethodsDecorator.checker_auto
+    def leg_auto(self, side, zone='leg'):
         """
         # TODO: zone out of args?
         # TODO: organitze and optimize this method
@@ -556,14 +607,14 @@ class autoRig(object):
 
             fkCtr.addChild(legFkControllersList[i+1])
             # fk controls
-            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]), 1, fkColor)
+            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]), 1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
             pm.delete(shapeFkTransform)
 
         # ik control
-        legIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone),1,17)
+        legIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone),1,17)
         # pm.xform(legIkControl, ws=True, m=pm.xform(legJoints[-1], q=True, ws=True, m=True))
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(legIkControl)  # parent to ctr group
@@ -588,9 +639,9 @@ class autoRig(object):
         ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zone, side))
         legIkControl.addChild(ikHandle)
         # create poles
-        legPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
+        legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
         relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
-        self.ikControllers['spine'][0].addChild(legPoleController)
+        self.ctrGrp.addChild(legPoleController)
         # constraint poleVector
         pm.poleVectorConstraint(legPoleController, ikHandle)
 
@@ -643,7 +694,20 @@ class autoRig(object):
         legIkControl.addChild(ikFkshape, r=True, s=True)
         pm.delete(ikFkNode)
 
-    def autoArm(self, side, zone='arm'):
+        # save Data
+        # todo: save quaternions too if necessary
+        zoneSide = '%s_%s' % (zone, side)
+        self.joints[zoneSide] = legJoints
+        self.ikControllers[zoneSide] = legIkControllerList
+        self.fkControllers[zoneSide] = legFkControllersList
+        return legIkControllerList, legFkControllersList
+
+    @MethodsDecorator.checker_auto
+    def foot_auto(self):
+        pass
+
+    @MethodsDecorator.checker_auto
+    def arm_auto(self, side, zone='arm'):
         """
         # TODO: zone out of args?
         # TODO: organize and optimize this method
@@ -693,14 +757,14 @@ class autoRig(object):
 
             fkCtr.addChild(armFkControllersList[i+1])
             # fk controls
-            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]),1, fkColor)
+            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]),1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
             pm.delete(shapeFkTransform)
 
         # ik control
-        armIkControl = self.createController('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%s_%sIk' % (side, zone), 1, 17)
+        armIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%s_%sIk' % (side, zone), 1, 17)
         pm.xform(armIkControl, ws=True, m=pm.xform(armJoints[-1], q=True, ws=True, m=True))
         #legIkControl.setTranslation(armJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(armIkControl)  # parent to ctr group
@@ -708,7 +772,7 @@ class autoRig(object):
         # clavicle fk control
         for i, fkCtr in enumerate(clavicleControllerList):  # last controller does not has shape
             # fk controls
-            shapeFkTransform = self.createController('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[-1]),1, fkColor)
+            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[-1]),1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
@@ -735,7 +799,7 @@ class autoRig(object):
         ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zone, side))
         armIkControl.addChild(ikHandle)
         # create poles
-        armPoleController = self.createController('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
+        armPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
         relocatePole(armPoleController, armIkJointList, 35)  # relocate pole Vector
         self.ikControllers['spine'][-1].addChild(armPoleController)
         # constraint poleVector
@@ -787,7 +851,6 @@ class autoRig(object):
         clavicleOrientConstraint = pm.orientConstraint(clavicleControllerList[0], clavicleJoints[0], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
         claviclePointConstraint = pm.pointConstraint(clavicleControllerList[0], clavicleJoints[0], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
 
-
         # ik blending controller attr
         ikFkshape.ikFk.connect(armPoleController.visibility)
         ikFkshape.ikFk.connect(armIkControl.visibility)
@@ -795,8 +858,18 @@ class autoRig(object):
         armIkControl.addChild(ikFkshape, r=True, s=True)
         pm.delete(ikFkNode)
 
+        # twist Bone
 
-    def createController(self, name, controllerType, s=1.0, colorIndex=4):
+        # save Data
+        zoneSide = '%s_%s' % (zone, side)
+        self.joints[zoneSide] = armJoints
+        self.ikControllers[zoneSide] = armIkControllerList
+        totalArmFkList = armFkControllersList + clavicleControllerList  # add clavicle to arm fk controllers
+        self.fkControllers[zoneSide] = totalArmFkList
+
+        return armIkControllerList, totalArmFkList
+
+    def create_controller(self, name, controllerType, s=1.0, colorIndex=4):
         """
         Args:
         name: name of controller
@@ -813,7 +886,6 @@ class autoRig(object):
 
         logger.debug('controller %s' % controller)
         return controller
-
 
 #######
 #utils#
