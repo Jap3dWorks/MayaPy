@@ -63,11 +63,12 @@ class nameMatcher(list):
                 self.append(matchElements)
 
 
-def renameObjects(objects=None, name='name', zone=None, side=None, objectType=None):
+def renameObjects(name='name', objectType=None, zone=None, side=None, objects=None):
     """
     rename with name convention:
-    name_objectType_zone_side_identifier_n_functionality
+    name_objectType_zone_side_n_functionality
     p.e: platform_stick_floor01_left_2_locator
+    p.e: akona_IK_spine_chest_1_ctr
     p.e: akona_twist_elbow_left_1_jnt
 
     Args:

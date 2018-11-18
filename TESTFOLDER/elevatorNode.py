@@ -351,6 +351,9 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
             # get output
             outputMatrixTransformHandle = pDataBlock.outputArrayValue(elevatorNode.outputMatrixTransformAttribute)
 
+            # get base Z vector from transform Matrix
+            baseVectorZ = OpenMaya.MVector(inputMatrix01Attribute(2,0), inputMatrix01Attribute(2,1), inputMatrix01Attribute(2,2))
+            baseVectorZ.normalize()
             # get distance vector, position im01 - im02
             # Explanation: this way we don't need mscriptUtils
             distanceVector = OpenMaya.MVector(inputMatrix02Attribute(3, 0) - inputMatrix01Attribute(3, 0),
@@ -379,22 +382,21 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
             xVector = floorVector ^ zVector  # todo: maybe recalculate cross product X
 
             # rotateVectors base, zVector same
-            quaternionBase = OpenMaya.MQuaternion(angle, zVector)
-            xVectorBase = xVector.rotateBy(quaternionBase)
-            yVectorBase = OpenMaya.MVector(floorVector).rotateBy(quaternionBase)
+            quaternionLower = OpenMaya.MQuaternion(angle, zVector)
+            xVectorLower = xVector.rotateBy(quaternionLower)
+            yVectorLower = OpenMaya.MVector(floorVector).rotateBy(quaternionLower)
             # rotateVectorsUpper
             quaternionUpper = OpenMaya.MQuaternion(-angle, zVector)
             xVectorUpper = xVector.rotateBy(quaternionUpper)
             yVectorUpper = OpenMaya.MVector(floorVector).rotateBy(quaternionUpper)
 
             # Normalize lengths
-            xVectorBase.normalize()
-            yVectorBase.normalize()
+            xVectorLower.normalize()
+            yVectorLower.normalize()
             zVector.normalize()
 
             xVectorUpper.normalize()
             yVectorUpper.normalize()
-
 
             for i in range(numFloor):
                 # 4 sticks by floor
@@ -406,36 +408,36 @@ class elevatorNode(OpenMayaMPx.MPxLocatorNode):
                     mFloatMatrix = OpenMaya.MFloatMatrix()
 
                     if n == 0:
-                        util.createFloatMatrixFromList([xVectorBase.x, xVectorBase.y, xVectorBase.z, 0,
-                                                        yVectorBase.x, yVectorBase.y, yVectorBase.z, 0,
+                        util.createFloatMatrixFromList([xVectorLower.x, xVectorLower.y, xVectorLower.z, 0,
+                                                        yVectorLower.x, yVectorLower.y, yVectorLower.z, 0,
                                                         zVector.x, zVector.y, zVector.z, 0,
-                                                        floorVector.x * i + inputMatrix01Attribute(3, 0),
-                                                        floorVector.y * i + inputMatrix01Attribute(3, 1),
-                                                        floorVector.z * i + inputMatrix01Attribute(3, 2)+distanceStick, 1],
+                                                        floorVector.x * i + inputMatrix01Attribute(3, 0)+baseVectorZ.x * distanceStick,
+                                                        floorVector.y * i + inputMatrix01Attribute(3, 1)+baseVectorZ.y * distanceStick,
+                                                        floorVector.z * i + inputMatrix01Attribute(3, 2)+baseVectorZ.z * distanceStick, 1],
                                                        mFloatMatrix)
                     elif n == 1:
                         util.createFloatMatrixFromList([xVectorUpper.x, xVectorUpper.y, xVectorUpper.z, 0,
                                                         yVectorUpper.x, yVectorUpper.y, yVectorUpper.z, 0,
                                                         zVector.x, zVector.y, zVector.z, 0,
-                                                        floorVector.x * (i+1) + inputMatrix01Attribute(3, 0),
-                                                        floorVector.y * (i+1) + inputMatrix01Attribute(3, 1),
-                                                        floorVector.z * (i+1) + inputMatrix01Attribute(3, 2) + distanceStick, 1],
+                                                        floorVector.x * (i+1) + inputMatrix01Attribute(3, 0)+baseVectorZ.x * distanceStick,
+                                                        floorVector.y * (i+1) + inputMatrix01Attribute(3, 1)+baseVectorZ.y * distanceStick,
+                                                        floorVector.z * (i+1) + inputMatrix01Attribute(3, 2)+baseVectorZ.z * distanceStick, 1],
                                                        mFloatMatrix)
                     elif n == 2:
-                        util.createFloatMatrixFromList([xVectorBase.x, xVectorBase.y, xVectorBase.z, 0,
-                                                        yVectorBase.x, yVectorBase.y, yVectorBase.z, 0,
+                        util.createFloatMatrixFromList([xVectorLower.x, xVectorLower.y, xVectorLower.z, 0,
+                                                        yVectorLower.x, yVectorLower.y, yVectorLower.z, 0,
                                                         zVector.x, zVector.y, zVector.z, 0,
-                                                        floorVector.x * i + inputMatrix01Attribute(3, 0),
-                                                        floorVector.y * i + inputMatrix01Attribute(3, 1),
-                                                        floorVector.z * i + inputMatrix01Attribute(3, 2) - distanceStick, 1],
+                                                        floorVector.x * i + inputMatrix01Attribute(3, 0)-baseVectorZ.x * distanceStick,
+                                                        floorVector.y * i + inputMatrix01Attribute(3, 1)-baseVectorZ.y * distanceStick,
+                                                        floorVector.z * i + inputMatrix01Attribute(3, 2)-baseVectorZ.z * distanceStick, 1],
                                                        mFloatMatrix)
                     elif n == 3:
                         util.createFloatMatrixFromList([xVectorUpper.x, xVectorUpper.y, xVectorUpper.z, 0,
                                                         yVectorUpper.x, yVectorUpper.y, yVectorUpper.z, 0,
                                                         zVector.x, zVector.y, zVector.z, 0,
-                                                        floorVector.x * (i + 1) + inputMatrix01Attribute(3, 0),
-                                                        floorVector.y * (i + 1) + inputMatrix01Attribute(3, 1),
-                                                        floorVector.z * (i + 1) + inputMatrix01Attribute(3, 2) - distanceStick, 1],
+                                                        floorVector.x * (i + 1) + inputMatrix01Attribute(3, 0)-baseVectorZ.x * distanceStick,
+                                                        floorVector.y * (i + 1) + inputMatrix01Attribute(3, 1)-baseVectorZ.y * distanceStick,
+                                                        floorVector.z * (i + 1) + inputMatrix01Attribute(3, 2)-baseVectorZ.z * distanceStick, 1],
                                                        mFloatMatrix)
 
 

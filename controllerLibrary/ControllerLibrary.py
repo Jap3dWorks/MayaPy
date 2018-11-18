@@ -42,9 +42,9 @@ class controllerLibrary(dict):
 		# cmds.file(rename = path)
 		# something selected or not, first we set the path, now we save the file
 		if cmds.ls(sl = True):
-			cmds.file(path, typ = 'mayaAscii', exportSelected = True, force = True)
+			cmds.file(path, typ='mayaAscii', exportSelected = True, force = True)
 		else:
-			cmds.file(path, typ = 'mayaAscii', ea=True, force = True) # <--- make a save as not a save
+			cmds.file(path, typ='mayaAscii', ea=True, force = True) # <--- make a save as not a save
 		# controllerLinrary is a dict class so we can store data in ourselves
 		# dictionary in a dictionary
 		self[name] = info
