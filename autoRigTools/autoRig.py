@@ -3,7 +3,7 @@ import re
 from maya import OpenMaya
 from autoRigTools import ctrSaveLoadToJson
 import inspect
-from functools import wraps
+reload(ctrSaveLoadToJson)  # review: reload
 
 import logging
 logging.basicConfig()
@@ -25,6 +25,7 @@ class RigAuto(object):
         self.joints = {}  # store joints
         self.ikControllers = {}
         self.fkControllers = {}
+        self.ikHandles = {}
 
         # create necessary groups
         # check if noXform exist
@@ -595,10 +596,10 @@ class RigAuto(object):
         return neckHeadIKCtrList, neckHeadFKCtrList
 
     @checker_auto('decorated')
-    def leg_auto(self, side, zone='leg'):
+    def leg_auto(self, side, foot, zone='leg'):
         """
-        # TODO: zone out of args?
-        # TODO: organitze and optimize this method
+        # TODO: zone out of args? read from method?
+        # TODO: organize and optimize this method
         auto build a ik fk leg
         Args:
             side: left or right
@@ -635,14 +636,14 @@ class RigAuto(object):
 
             fkCtr.addChild(legFkControllersList[i+1])
             # fk controls
-            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]), 1, fkColor)
+            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%sFk_%s' % (NameIdList[i], side), 1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
             pm.delete(shapeFkTransform)
 
         # ik control
-        legIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side ), '%s_%sIk' % (side, zone),1,17)
+        legIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
         # pm.xform(legIkControl, ws=True, m=pm.xform(legJoints[-1], q=True, ws=True, m=True))
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(legIkControl)  # parent to ctr group
@@ -728,11 +729,178 @@ class RigAuto(object):
         self.joints[zoneSide] = legJoints
         self.ikControllers[zoneSide] = legIkControllerList
         self.fkControllers[zoneSide] = legFkControllersList
+        self.ikHandles[zoneSide] = ikHandle
+
+        # TODO: in this method, it's possible don't export ikController, because it's in the foot. test it
         return legIkControllerList, legFkControllersList
 
-    @checker_auto('decorated')
-    def foot_auto(self):
-        pass
+
+    def foot_auto(self, side, zone='foot'):
+        """
+        # TODO: organitze and optimize this method
+        auto build a ik fk foot
+        Args:
+            side: left or right
+            zone: foot
+        """
+        fkColor = 14 if side =='left' else 29
+        footJoints = [point for point in pm.ls() if re.match('^%s.*([fF]oot).*%s.*joint$' % (self.chName, side), str(point))]
+        toesJoints = [point for point in pm.ls() if re.match('^%s.*([tT]oe).*%s.*joint$' % (self.chName, side), str(point))]
+        logger.debug('foot joints: %s' % footJoints)
+        logger.debug('toes joints: %s' % toesJoints)
+
+        # arrange toes by joint chain p.e [[toea, toesa_Tip], [toeb, toeb_tip]]
+        # method of this
+        toesJointsCopy = list(toesJoints)  # copy of the toes list
+        toesJointsArr = []
+        while len(toesJointsCopy):
+            toeJoint = []
+            firstJoint = toesJointsCopy.pop(0)
+            toeJoint.append(firstJoint)
+            for joint in firstJoint.listRelatives(ad=True):
+                if joint in toesJointsCopy:
+                    toeJoint.append(joint)
+                    toesJointsCopy.remove(joint)
+
+            toesJointsArr.append(toeJoint)
+
+        logger.debug('toes joints arranged: %s' % toesJointsArr)
+        logger.debug('toes joints: %s' % toesJoints)
+
+        # controllers
+        footFkControllers = []
+        footIkControllers = []
+
+        # NameIdList = []  # store idNames. p.e toeA
+
+        # create foot ctr
+        for n, joint in enumerate(footJoints):
+            controllerName = str(joint).split('_')[1]
+            logger.debug('foot controller name: %s' % controllerName)
+            footFkCtr = joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
+            # get transformMatrix and orient new controller
+            matrix = pm.xform(footFkCtr, ws=True, q=True, m=True)
+
+            vectorX = OpenMaya.MVector(matrix[0], 0, matrix[1])
+            vectorX.normalize()
+            vectorZ = OpenMaya.MVector(matrix[8], 0, matrix[10])
+            vectorZ.normalize()
+            vectorY = vectorX ^ vectorZ
+            vectorY.normalize()
+            vectorX = vectorY ^ vectorZ
+            vectorX.normalize()
+
+            matrix = [vectorX.x, vectorX.y,vectorX.z,matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
+                                 vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
+
+            pm.xform(footFkCtr, ws=True, m=matrix)
+
+            # fk control Shape
+            shape = self.create_controller('%sShape' % str(footFkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
+            footFkCtr.addChild(shape.getShape(), s=True, r=True)
+            pm.delete(shape)
+
+            if n == 0:
+                # save this matrix, to apply latter if necessary
+                firstfootJointMatrix = matrix
+
+            #save controller
+            footFkControllers.append(footFkCtr)
+
+        # parent fk controller under leg
+        # TODO: review: this isn't modular
+        self.fkControllers['leg_%s' % side][-1].addChild(footFkControllers[0])
+
+        # toe Fk ctr
+        # last foot fkCtr
+        lastFootFkCtr = footFkControllers[-1]
+        for i, toe in enumerate(toesJointsArr):
+            toeJointChain = []
+            for joint in toe[:-1]:
+                controllerName = str(joint).split('_')[1]
+                logger.debug('foot controller name: %s' % controllerName)
+                toeFkCtr = joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
+
+                # get transformMatrix and orient new controller
+                matrix = pm.xform(toeFkCtr, ws=True, q=True, m=True)
+
+                vectorX = OpenMaya.MVector(matrix[0], 0, matrix[1])
+                vectorX.normalize()
+                vectorZ = OpenMaya.MVector(matrix[8], 0, matrix[10])
+                vectorZ.normalize()
+                vectorY = vectorX ^ vectorZ
+                vectorY.normalize()
+                vectorX = vectorY ^ vectorZ
+                vectorX.normalize()
+
+                pm.xform(toeFkCtr, ws=True,
+                         m=[vectorX.x, vectorX.y, vectorX.z, matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
+                            vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14],
+                            matrix[15]])
+
+                # fk control Shape
+                shape = self.create_controller('%sShape' % str(toeFkCtr), '%sFk' % (controllerName), 1, fkColor)
+                toeFkCtr.addChild(shape.getShape(), s=True, r=True)
+                pm.delete(shape)
+
+                # if joint Chain, reconstruct hierarchy
+                if toeJointChain:
+                    toeJointChain[-1].addChild(toeFkCtr)
+
+                toeJointChain.append(toeFkCtr)
+                footFkControllers.append((toeFkCtr))
+
+            # middle toe, useful later to general toe controller
+            if i == len(toesJointsArr) // 2:
+                middleToeCtr = toeJointChain[0]
+                middleToeCtrMatrix = pm.xform(middleToeCtr, q=True, ws=True, m=True)
+
+            # construct foot hierarchy
+            lastFootFkCtr.addChild(toeJointChain[0])
+
+        # ik foot ctr
+        # TODO: create the rest of the controllers here too
+        footIkCtr = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk' % (zone), 1, 17)
+        self.ctrGrp.addChild(footIkCtr)
+
+        footIkControllers.append(footIkCtr)
+
+        for ctrType in ('footHeel', 'footTiltIn', 'footTiltOut', 'footToes', 'footBall'):
+            footIkCtrWalk = self.create_controller('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, ctrType), '%sIk_%s' % (ctrType, side), 1, 17)
+            footIkControllers[-1].addChild(footIkCtrWalk)
+
+            footBallIkCtr = footIkCtrWalk if ctrType == 'footBall' else None
+
+            footIkControllers.append(footIkCtrWalk)
+
+        # once all are created, translate if necessary
+        pm.xform(footIkCtr, ws=True, m=firstfootJointMatrix)
+        pm.xform(footBallIkCtr, ws=True, m=middleToeCtrMatrix)
+        footBallIkCtr.addChild(self.ikHandles['leg_%s' % side])  # add ik handle too
+
+
+        # toes general Controller
+        # review: no side
+        toesFkController = self.create_controller('%s_fk_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+        # align to middle individual toe
+        pm.xform(toesFkController, ws=True, m=middleToeCtrMatrix)
+
+        lastFootFkCtr.addChild(toesFkController)
+        footFkControllers.append(toesFkController)
+
+        # fk Roots and auto
+        footFkRoots = createRoots(footFkControllers)
+        footFkAuto = createRoots(footFkControllers, 'auto')
+        footIkRoots = createRoots(footIkControllers)
+        footIkAuto = createRoots(footIkControllers, 'auto')
+
+        # connect toes rotate attributes
+        for fkAuto in footFkAuto:
+            if 'toe' in str(fkAuto) and 'toesGeneral' not in str(fkAuto):
+                for axis in ('X', 'Y', 'Z'):
+                    toesFkController.attr('rotate%s' % axis).connect(fkAuto.attr('rotate%s' % axis))
+
+
 
     @checker_auto('decorated')
     def arm_auto(self, side, zone='arm'):
@@ -785,14 +953,14 @@ class RigAuto(object):
 
             fkCtr.addChild(armFkControllersList[i+1])
             # fk controls
-            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[i]),1, fkColor)
+            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%sFk_%s' % (NameIdList[i], side),1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
             pm.delete(shapeFkTransform)
 
         # ik control
-        armIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%s_%sIk' % (side, zone), 1, 17)
+        armIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
         pm.xform(armIkControl, ws=True, m=pm.xform(armJoints[-1], q=True, ws=True, m=True))
         #legIkControl.setTranslation(armJoints[-1].getTranslation('world'), 'world')
         self.ctrGrp.addChild(armIkControl)  # parent to ctr group
@@ -800,7 +968,7 @@ class RigAuto(object):
         # clavicle fk control
         for i, fkCtr in enumerate(clavicleControllerList):  # last controller does not has shape
             # fk controls
-            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%s_%sFk' % (side, NameIdList[-1]),1, fkColor)
+            shapeFkTransform = self.create_controller('%sShape' % str(fkCtr), '%sFk_%s' % (NameIdList[-1], side),1, fkColor)
             # parentShape
             fkCtr.addChild(shapeFkTransform.getShape(), s=True, r=True)
             # delete shape transform
@@ -900,10 +1068,14 @@ class RigAuto(object):
     def create_controller(self, name, controllerType, s=1.0, colorIndex=4):
         """
         Args:
-        name: name of controller
-        controllerType(str): from json controller types
+            name: name of controller
+            controllerType(str): from json controller types
+        return:
+            controller: pymel transformNode
+            transformMatrix: stored position
         """
-        controller = pm.PyNode(ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s, colorIndex))
+        controller, transformMatrix = ctrSaveLoadToJson.ctrLoadJson(controllerType, self.chName, self.path, s, colorIndex)
+        controller = pm.PyNode(controller)
         controller.rename(name)
 
         shapes = controller.listRelatives(s=True)
@@ -912,6 +1084,7 @@ class RigAuto(object):
             for attr in ('aiRenderCurve', 'aiCurveWidth', 'aiSampleRate', 'aiCurveShaderR', 'aiCurveShaderG', 'aiCurveShaderB'):
                 pm.setAttr('%s.%s' % (str(shape), attr), channelBox=False, keyable=False)
 
+        pm.xform(controller, ws=True, m=transformMatrix)
         logger.debug('controller %s' % controller)
         return controller
 
@@ -972,7 +1145,16 @@ def createRoots(list, sufix='root'):
         if parent:
             parent.addChild(rootGrp)
         rootGrp.addChild(arg)
+
+        # if is a joint, assegure reset values
+        if isinstance(arg, pm.nodetypes.Joint):
+            for axis in ('X', 'Y', 'Z'):
+                arg.attr('jointOrient%s' % axis).set(0.0)
+
+            arg.setRotation((0,0,0), 'object')
+
         roots.append(rootGrp)
+
     return roots
 
 def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
