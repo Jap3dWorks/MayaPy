@@ -19,9 +19,10 @@ def ctrSaveJson(typeController, name, path):
         name: file name
         path: path to save file
     Returns: fullPathName of createdController
+    name: [[[[cv],[knots], degree, form],[[cv],[knots], degree, form]],[matrixTransform]]
     """
     # create file path
-    controllerFile = ('%s/%s.json' % (path, name))
+    controllerFile = ('%s/%s_controllers.json' % (path, name))
 
     # get selection only use the first element
     selection = pm.ls(sl=True)[0]
@@ -46,7 +47,7 @@ def ctrSaveJson(typeController, name, path):
             logger.info(('%s %s controller not saved' % (name, typeController)).capitalize())
             return
 
-    # list where save list attributes
+    # here save list attributes
     controllerAttr = []
 
     curveShapes = selection.listRelatives(s=True, c=True)
@@ -64,9 +65,11 @@ def ctrSaveJson(typeController, name, path):
 
         # one list per shape in the controller
         controllerAttr.append(shapeAttr)
-    
+        # todo: append matrix transform
+
+    matrixTransform = pm.xform(selection, q=True, ws=True, m=True)
     # save controller to dictionary
-    controllerDict[typeController] = controllerAttr
+    controllerDict[typeController] = controllerAttr, matrixTransform
 
     # save to json
     with open(controllerFile, 'w') as f:
@@ -86,7 +89,7 @@ def ctrLoadJson(typeController, name, path, SFactor=1, ColorIndex = 4):
         ColorIndex: color index
     Returns: fullPathName of createdController
     """
-    controllerFile = ('%s/%s.json' % (path, name))
+    controllerFile = ('%s/%s_controllers.json' % (path, name))
 
     # load json
     with open(controllerFile, 'r') as f:
@@ -94,7 +97,7 @@ def ctrLoadJson(typeController, name, path, SFactor=1, ColorIndex = 4):
         controllerDict = json.load(f)
 
     # list with controller parameters
-    ctrParameters = controllerDict[typeController]
+    ctrParameters = controllerDict[typeController][0]
     transform = OpenMaya.MObject()
     for n, ctrParam in enumerate(ctrParameters):
         curveFn = OpenMaya.MFnNurbsCurve()
@@ -114,4 +117,23 @@ def ctrLoadJson(typeController, name, path, SFactor=1, ColorIndex = 4):
         if n == 0:
             transform = OpenMaya.MDagPath.getAPathTo(newControllerDagPath.transform())
 
-    return transform.fullPathName()
+    # return controller name, and saved matrix transform
+    return transform.fullPathName(), controllerDict[typeController][1]
+
+
+"""
+import maya.cmds as cmds
+
+def saveControllersSelection():
+    selection = cmds.ls(sl=True)
+    cmds.select(cl=True)
+    for sel in selection:
+        cmds.select(sel, r=True)
+        try:
+            autoRigTools.ctrSaveLoadToJson.ctrSaveJson(sel,'akona', 'D:\_docs\_Animum\Akona')
+        except:
+            pass
+        cmds.select(cl=True)
+
+saveControllersSelection()
+"""
