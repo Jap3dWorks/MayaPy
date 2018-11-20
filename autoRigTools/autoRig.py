@@ -682,6 +682,7 @@ class RigAuto(object):
         # locator shape instanced version
         ikFkNode = pm.spaceLocator(name='%s_%s_%s_attr' % (self.chName, zone, side))
         ikFkshape = ikFkNode.getShape()
+        ikFkshape.visibility.set(0)
         pm.addAttr(ikFkshape, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=0.0, k=True)
         # hide unused attributes
         for attr in ('localPosition', 'localScale'):
@@ -689,25 +690,23 @@ class RigAuto(object):
                 pm.setAttr('%s.%s%s' % (ikFkshape, attr, axis), channelBox=False, keyable=False)
 
         plusMinusIkFk = pm.createNode('plusMinusAverage', name='%s_ikFk_blending_%s_%s_plusMinusAverage' % (self.chName, zone, side))
-        ikFkNode.ikFk.connect(plusMinusIkFk.input1D[1])
+        ikFkshape.ikFk.connect(plusMinusIkFk.input1D[1])
         plusMinusIkFk.input1D[0].set(1)
         plusMinusIkFk.operation.set(2)
 
         # iterate along main joints
-        # todo: visibility
+        # todo: visibility, connect to ikFkShape
         for i, joint in enumerate(legMainJointList):
             # attributes
             orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
-            ikFkNode.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
-            ikFkNode.ikFk.connect(legIkJointList[i].visibility)
+            ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
+            ikFkshape.ikFk.connect(legIkJointList[i].visibility)
 
-            # clone instanced
-            ikfkNodeInstance = ikFkNode.duplicate(instanceLeaf=True)[0]
             # parent shape
-            legFkControllersList[i].addChild(ikfkNodeInstance.getShape(), r=True, s=True)
-            pm.delete(ikfkNodeInstance)
+            legFkControllersList[i].addChild(ikFkshape, s=True, add=True)
 
             plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(legFkControllersList[i])))
+            # review: visibility shape
             plusMinusIkFk.output1D.connect(legFkControllersList[i].visibility)
 
             lockAndHideAttr(legFkControllersList[i], True, False, False)
@@ -730,16 +729,14 @@ class RigAuto(object):
             """
             fkColor = 14 if side =='left' else 29
             footJoints = [point for point in pm.ls() if re.match('^%s.*([fF]oot).*%s.*joint$' % (self.chName, side), str(point))]
-            toesJoints = [point for point in pm.ls() if re.match('^%s.*([tT]oe).*%s.*joint$' % (self.chName, side), str(point))]
+            toesJoints = [point for point in pm.ls() if re.match('^%s.*([tT]oe).(?!_tip).*%s.*joint$' % (self.chName, side), str(point))]
             footTotalJoints = footJoints + toesJoints
             logger.debug('foot joints: %s' % footJoints)
             logger.debug('toes joints: %s' % toesJoints)
 
             # arrange toes by joint chain p.e [[toea, toesa_Tip], [toeb, toeb_tip]]
-            # method of this?
             toesJointsCopy = list(toesJoints)  # copy of the toes list
             toesJointsArr = []
-
             while len(toesJointsCopy):
                 toeJoint = []
                 firstJoint = toesJointsCopy.pop(0)
@@ -751,11 +748,15 @@ class RigAuto(object):
 
                 toesJointsArr.append(toeJoint)
 
-            # controllers
-            footFkControllersList = []
-            footIkControllersList = []
-            footMainJointsList = []
+            # controllers and main lists
+            footFkControllerList = []  # fk
+            toesFkControllerList = []
+            footIkControllerList = []  # ik
+            toesIkControllerList = []
+            footMainJointsList = []  # main
+            toesMainJointsList = []
             # create foot ctr
+
             for joint in footJoints:
                 controllerName = str(joint).split('_')[1]
                 logger.debug('foot controller name: %s' % controllerName)
@@ -774,48 +775,47 @@ class RigAuto(object):
                 vectorX = vectorY ^ vectorZ
                 vectorX.normalize()
 
-                matrix = [vectorX.x, vectorX.y,vectorX.z,matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
+                matrix = [vectorX.x, vectorX.y, vectorX.z, matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
                                      vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
-                pm.xform(footFkCtr, ws=True, m=matrix)
+                pm.xform(footFkCtr, ws=True, m=matrix)  # new transform matrix with vector ajust
 
                 # fk control Shape
                 shape = self.create_controller('%sShape' % str(footFkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
                 footFkCtr.addChild(shape.getShape(), s=True, r=True)
                 pm.delete(shape)
 
-                if not footFkControllersList:
+                if not footFkControllerList:
                     # save this matrix, to apply latter if necessary
-                    firstfootJointMatrix = matrix
+                    firstfootFkMatrix = matrix
 
-                else:
-                    footFkControllersList[-1].addChild(footFkCtr)
+                else:  # if more than 1 joint, reconstruct hierarchy
+                    footFkControllerList[-1].addChild(footFkCtr)
                     footMainJointsList[-1].addChild(footMain)
 
                 #save controllers
-                footFkControllersList.append(footFkCtr)
+                footFkControllerList.append(footFkCtr)
                 footMainJointsList.append(footMain)
 
             # parent fk controller under leg
-            # TODO: review: this isn't modular
-            legFkControllersList[-1].addChild(footFkControllersList[0])
+            legFkControllersList[-1].addChild(footFkControllerList[0])
             legMainJointList[-1].addChild(footMainJointsList[0])
 
-            # toe Fk ctr
-            # last foot fkCtr, easy later acces
-            lastFootFkCtr = footFkControllersList[-1]
-            lastFootMainJoint = footMainJointsList[-1]
+            # create toe Fk and ik ctr
+            # last foot fkCtr, easiest fot later access
+            toeIkCtrParents = []  # list with first joint of toes chains
             for i, toe in enumerate(toesJointsArr):
-                toeJointChain = []
-                mainToeJointChain = []
-                for joint in toe[:-1]:  # no tip
+                toeFkChain = []
+                toeIkChain = []
+                toeMainChain = []
+                for joint in toe:
                     controllerName = str(joint).split('_')[1]
                     logger.debug('foot controller name: %s' % controllerName)
                     toeFkCtr = joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
                     toeMainJnt = joint.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0]
+                    toeIkCtr = joint.duplicate(po=True, name='%s_Ik_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
 
                     # get transformMatrix and orient new controller
                     matrix = pm.xform(toeFkCtr, ws=True, q=True, m=True)
-
                     vectorX = OpenMaya.MVector(matrix[0], 0, matrix[1])
                     vectorX.normalize()
                     vectorZ = OpenMaya.MVector(matrix[8], 0, matrix[10])
@@ -824,101 +824,165 @@ class RigAuto(object):
                     vectorY.normalize()
                     vectorX = vectorY ^ vectorZ
                     vectorX.normalize()
+                    matrix = [vectorX.x, vectorX.y, vectorX.z, matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
+                                vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
+                    # apply transforms constrollers
+                    pm.xform(toeFkCtr, ws=True, m=matrix)
+                    pm.xform(toeIkCtr, ws=True, m=matrix)
 
-                    pm.xform(toeFkCtr, ws=True,
-                             m=[vectorX.x, vectorX.y, vectorX.z, matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
-                                vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14],
-                                matrix[15]])
-
-                    # fk control Shape
+                    # fk ik toe control Shape
                     shape = self.create_controller('%sShape' % str(toeFkCtr), '%sFk' % (controllerName), 1, fkColor)
                     toeFkCtr.addChild(shape.getShape(), s=True, r=True)
                     pm.delete(shape)
+                    shape = self.create_controller('%sShape' % str(toeIkCtr), '%sFk' % (controllerName), 1, fkColor)
+                    toeIkCtr.addChild(shape.getShape(), s=True, r=True)
+                    pm.delete(shape)
 
                     # if joint Chain, reconstruct hierarchy
-                    if toeJointChain:
-                        toeJointChain[-1].addChild(toeFkCtr)
-                        mainToeJointChain[-1].addChild(toeMainJnt)
+                    if toeFkChain:
+                        toeFkChain[-1].addChild(toeFkCtr)
+                        toeIkChain[-1].addChild(toeIkCtr)
+                        toeMainChain[-1].addChild(toeMainJnt)
 
-                    toeJointChain.append(toeFkCtr)
-                    footFkControllersList.append(toeFkCtr)
-                    mainToeJointChain.append(toeMainJnt)
-                    footMainJointsList.append(toeMainJnt)
+                    toeFkChain.append(toeFkCtr)
+                    toeIkChain.append(toeIkCtr)
+                    toeMainChain.append(toeMainJnt)
+
+                    toesFkControllerList.append(toeFkCtr)
+                    toesIkControllerList.append(toeIkCtr)
+                    toesMainJointsList.append(toeMainJnt)
 
                 # middle toe, useful later to general toe controller
                 if i == len(toesJointsArr) // 2:
-                    middleToeCtr = toeJointChain[0]
+                    middleToeCtr = toeFkChain[0]
                     middleToeCtrMatrix = pm.xform(middleToeCtr, q=True, ws=True, m=True)
 
                 # construct foot hierarchy
-                lastFootFkCtr.addChild(toeJointChain[0])
-                lastFootMainJoint.addChild(mainToeJointChain[0])
+                footFkControllerList[-1].addChild(toeFkChain[0])
+                toeIkCtrParents.append(toeIkChain[0])  # ik ctr parent for later
+                logger.debug('toeIkchain: %s, %s' % (toeIkChain[0], type(toeIkChain[0])))
+                logger.debug('toeIkCtrParents: %s' % (toeIkCtrParents))
+                footMainJointsList[-1].addChild(toeMainChain[0])
 
             # ik foot ctr
             # TODO: create the rest of the controllers here too
             footIkCtr = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk' % (zone), 1, 17)
             self.ctrGrp.addChild(footIkCtr)
-
-            footIkControllersList.append(footIkCtr)
+            footIkControllerList.append(footIkCtr)  # append joint to list
 
             for ctrType in ('footHeel', 'footTiltIn', 'footTiltOut', 'footToes', 'footBall'):
                 footIkCtrWalk = self.create_controller('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, ctrType), '%sIk_%s' % (ctrType, side), 1, 17)
-                footIkControllersList[-1].addChild(footIkCtrWalk)
+                footIkControllerList[-1].addChild(footIkCtrWalk)
 
-                footBallIkCtr = footIkCtrWalk if ctrType == 'footBall' else None
+                if ctrType == 'footToes':
+                    footToesIkCtr = footIkCtrWalk
+                elif ctrType == 'footBall':
+                    footBallIkCtr = footIkCtrWalk
 
-                footIkControllersList.append(footIkCtrWalk)
+                footIkControllerList.append(footIkCtrWalk)
 
             # once all are created, translate if necessary
-            pm.xform(footIkCtr, ws=True, m=firstfootJointMatrix)
-            pm.xform(footBallIkCtr, ws=True, m=middleToeCtrMatrix)
+            pm.xform(footIkCtr, ws=True, m=firstfootFkMatrix)
+            footBallIkMatrix = [firstfootFkMatrix[0],firstfootFkMatrix[1],firstfootFkMatrix[2],firstfootFkMatrix[3],
+                                                firstfootFkMatrix[4],firstfootFkMatrix[5],firstfootFkMatrix[6],firstfootFkMatrix[7],
+                                                firstfootFkMatrix[8],firstfootFkMatrix[9],firstfootFkMatrix[10],firstfootFkMatrix[11],
+                                                middleToeCtrMatrix[12], middleToeCtrMatrix[13], middleToeCtrMatrix[14], middleToeCtrMatrix[15]]
+            pm.xform(footBallIkCtr, ws=True, m=footBallIkMatrix)
             footBallIkCtr.addChild(ikHandle)  # add ik handle too
+            # parent toes Ik ctr to footToes
+            logger.debug('footToesIkCtr: %s, %s' % (footToesIkCtr, type(footToesIkCtr)))
+            logger.debug('toeIkCtrParents: %s' % toeIkCtrParents)
+            for toeCtr in toeIkCtrParents:
+                footToesIkCtr.addChild(toeCtr)
+
             pm.delete(legIkControl.firstParent())  # if foot, we do not need this controller
             legIkControllerList.remove(legIkControl)
 
-            # toes general Controller  review: no side
-            toesFkController = self.create_controller('%s_fk_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
-            pm.xform(toesFkController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe
+            # toes general Controller ik Fk review: no side review: ik ctrllers
+            toesFkGeneralController = self.create_controller('%s_fk_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            pm.xform(toesFkGeneralController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe review
+            toesIkGeneralController = self.create_controller('%s_ik_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            pm.xform(toesIkGeneralController, ws=True, m=middleToeCtrMatrix)
+            # parent and store to lists
+            footFkControllerList[-1].addChild(toesFkGeneralController)
+            footToesIkCtr.addChild(toesIkGeneralController)
+            toesFkControllerList.append(toesFkGeneralController)
+            toesIkControllerList.append(toesIkGeneralController)
 
-            lastFootFkCtr.addChild(toesFkController)
-            footFkControllersList.append(toesFkController)
-
-            # fk Roots and auto
-            footFkRoots = createRoots(footFkControllersList)
-            footFkAuto = createRoots(footFkControllersList, 'auto')
-            footIkRoots = createRoots(footIkControllersList)
-            footIkAuto = createRoots(footIkControllersList, 'auto')
+            # fk Roots and autos
+            footFkRoots = createRoots(footFkControllerList)
+            footFkAuto = createRoots(footFkControllerList, 'auto')
+            footIkRoots = createRoots(footIkControllerList)
+            footIkAuto = createRoots(footIkControllerList, 'auto')
+            toesFkRoots = createRoots(toesFkControllerList)
+            toesFkAuto = createRoots(toesFkControllerList, 'auto')
+            toesIkRoots = createRoots(toesIkControllerList)
+            toesIkAuto = createRoots(toesIkControllerList, 'auto')
 
             # connect toes rotate attributes
-            for fkAuto in footFkAuto:
-                if 'toe' in str(fkAuto) and 'toesGeneral' not in str(fkAuto):
-                    for axis in ('X', 'Y', 'Z'):
-                        toesFkController.attr('rotate%s' % axis).connect(fkAuto.attr('rotate%s' % axis))
+            for ikOrFk in [toesFkAuto, toesIkAuto]:
+                toesGeneralCtrIkOrFk = toesFkGeneralController if ikOrFk == toesFkAuto else toesIkGeneralController
+                logger.debug('toesGeneralCtrIkOrFk: %s, %s' % (toesGeneralCtrIkOrFk, type(toesGeneralCtrIkOrFk)))
+                for iAuto in ikOrFk:
+                    if 'toe' in str(iAuto) and 'toesGeneral' not in str(iAuto):
+                        for axis in ('X', 'Y', 'Z'):
+                            toesGeneralCtrIkOrFk.attr('rotate%s' % axis).connect(iAuto.attr('rotate%s' % axis))
 
-            logger.debug('foot main list: %s' % footMainJointsList)
-            logger.debug('foot Fk list:%s' % footFkControllersList)
-            logger.debug('foot IK list:%s' % footIkControllersList)
+            # orient constraint main to ik or fk foot
+            for i, mainJoint in enumerate(footMainJointsList):
+                if i == 0:
+                    orientConstraint = pm.orientConstraint(footIkControllerList[-1], footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+                    ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(footIkControllerList[-1])))  # shape with bleeding attribute
+                    ikFkshape.ikFk.connect(footIkControllerList[i].visibility)  # all foot chain visibility
 
-            # orient constraint main to ik or fk
-            for i, mainJoint in enumerate(footMainJointsList):  # fixme, be careful with ik hierarchy, it is inverse
-                orientConstraint = pm.orientConstraint(footIkControllersList[i], footFkControllersList[i], mainJoint, maintainOffset=True, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
-                ikFkNode.ikFk.connect(orientConstraint.attr('%sW0' % str(footIkControllersList[i])))
-                ikFkNode.ikFk.connect(footIkControllersList[i].visibility)  # review
+                    # parent shape and clone Shape
+                    footIkControllerList[-1].addChild(ikFkshape, s=True, add=True)
 
-                # clone instanced
-                ikfkNodeInstance = ikFkNode.duplicate(instanceLeaf=True)[0]
-                # parent shape
-                footFkControllersList[i].addChild(ikfkNodeInstance.getShape(), r=True, s=True)
-                pm.delete(ikfkNodeInstance)
+                    # parent shape
+                    footFkControllerList[i].addChild(ikFkshape, s=True, add=True)
 
-                plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(footFkControllersList[i])))
-                plusMinusIkFk.output1D.connect(footFkControllersList[i].visibility)
+                    plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(footFkControllerList[i])))
+                    plusMinusIkFk.output1D.connect(footFkControllerList[i].getShape().visibility)
 
-                lockAndHideAttr(footFkControllersList[i], True, False, False)
-                pm.setAttr('%s.radi' % footFkControllersList[i], channelBox=False, keyable=False)
+                else:
+                    orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
 
-                # connect to deform skeleton fixme
-                orientDeformConstraint = pm.orientConstraint(mainJoint, footTotalJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+
+                lockAndHideAttr(footFkControllerList[i], True, False, False)
+                pm.setAttr('%s.radi' % footFkControllerList[i], channelBox=False, keyable=False)
+
+                # connect to deform skeleton fixme: no tips in main // orient constraint names // toes names and foot names
+                orientDeformConstraint = pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+
+            # main ik fk toes
+            for i, mainJoint in enumerate(toesMainJointsList):
+                orientConstraint = pm.orientConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=True,
+                                                       name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+
+                pointConstraint = pm.pointConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=False,
+                                                       name='%s_main_blending_%s_%s_pointConstraint' % (self.chName, zone, side))
+
+                ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
+                ikFkshape.ikFk.connect(pointConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
+                ikFkshape.ikFk.connect(toesIkControllerList[i].visibility)  # all foot chain visibility
+
+                # parent shape and clone Shape
+                footIkControllerList[i].addChild(ikFkshape, s=True, add=True)
+
+                # parent shape fk
+                toesFkControllerList[i].addChild(ikFkshape, s=True, add=True)
+
+                plusMinusIkFk.output1D.connect(orientConstraint.attr('%sW1' % str(toesFkControllerList[i])))
+                plusMinusIkFk.output1D.connect(pointConstraint.attr('%sW1' % str(toesFkControllerList[i])))
+                plusMinusIkFk.output1D.connect(toesFkControllerList[i].visibility)
+
+                lockAndHideAttr(toesFkControllerList[i], True, False, False)
+                pm.setAttr('%s.radi' % toesFkControllerList[i], channelBox=False, keyable=False)
+
+                # connect to deform skeleton fixme no tips in main
+                orientDeformConstraint = pm.orientConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_main_%s_%s_orientConstraint' % (self.chName, zone, side))
+                pointDeformConstraint = pm.pointConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_main_%s_%s_pointConstraint' % (self.chName, zone, side))
+
 
             #legIkControllerList = legIkControllerList + footIkControllersList
             #legFkControllersList = legFkControllersList + footFkControllersList
@@ -928,7 +992,7 @@ class RigAuto(object):
         else:
             # parent shape
             legIkControl.addChild(ikFkshape, r=True, s=True)
-            pm.delete(ikFkNode)
+        pm.delete(ikFkNode)
 
         # save Data
         # todo: save quaternions too if necessary
