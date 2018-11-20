@@ -10,7 +10,6 @@ logging.basicConfig()
 logger = logging.getLogger('autoRig:')
 logger.setLevel(logging.DEBUG)
 
-# TODO: IK fK lower case
 # TODO: neck twist odd, skinning problem?
 
 class RigAuto(object):
@@ -358,9 +357,6 @@ class RigAuto(object):
 
         # rebuildCurve
         pm.rebuildCurve(neckHeadCurve, s=2, rpo=True, ch=False, rt=0, d=3, kt=0, kr=0)
-
-        # review: testAuto
-        # TODO: search an automation, use  distanceToCurve
         adjustCurveToPoints(neckHeadJoints[:-1], neckHeadCurve, 16, 0.01)
 
         # create locators and connect to curve CV's
@@ -683,7 +679,7 @@ class RigAuto(object):
         ikFkNode = pm.spaceLocator(name='%s_%s_%s_attr' % (self.chName, zone, side))
         ikFkshape = ikFkNode.getShape()
         ikFkshape.visibility.set(0)
-        pm.addAttr(ikFkshape, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=0.0, k=True)
+        pm.addAttr(ikFkshape, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=1.0, k=True)
         # hide unused attributes
         for attr in ('localPosition', 'localScale'):
             for axis in ('X', 'Y', 'Z'):
@@ -866,13 +862,27 @@ class RigAuto(object):
 
             # ik foot ctr
             # TODO: create the rest of the controllers here too
-            footIkCtr = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk' % (zone), 1, 17)
+            footIkCtr = self.create_controller('%s_ik_%s_%s_foot_ctr' % (self.chName, zone, side), '%sIk' % (zone), 1, 17)
             self.ctrGrp.addChild(footIkCtr)
             footIkControllerList.append(footIkCtr)  # append joint to list
+            footIkAttrTypes = ['heel', 'tilt', 'toes', 'ball', 'footRoll']
+            # add auto attributes
+            for attr in footIkAttrTypes:
+                pm.addAttr(footIkCtr, longName=attr, shortName=attr, type='float', defaultValue=0.0, k=True)
 
-            for ctrType in ('footHeel', 'footTiltIn', 'footTiltOut', 'footToes', 'footBall'):
+            pm.addAttr(footIkCtr, longName='showControls', shortName='showControls', type='bool', defaultValue=True, k=False)
+            pm.setAttr('%s.showControls' % str(footIkCtr), channelBox=True)
+
+            footRollCtr=[]  # list of footRoll ctr
+
+            footIkCtrTypes = ('footHeel', 'footTiltIn', 'footTiltOut', 'footToes', 'footBall')
+            for ctrType in footIkCtrTypes:
                 footIkCtrWalk = self.create_controller('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, ctrType), '%sIk_%s' % (ctrType, side), 1, 17)
                 footIkControllerList[-1].addChild(footIkCtrWalk)
+                footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
+
+                if 'tilt' not in ctrType.lower():
+                    footRollCtr.append(footIkCtrWalk)  # save footRoll controllers
 
                 if ctrType == 'footToes':
                     footToesIkCtr = footIkCtrWalk
@@ -913,6 +923,7 @@ class RigAuto(object):
             footFkRoots = createRoots(footFkControllerList)
             footFkAuto = createRoots(footFkControllerList, 'auto')
             footIkRoots = createRoots(footIkControllerList)
+            footRollAuto = createRoots(footRollCtr, 'footRollAuto')
             footIkAuto = createRoots(footIkControllerList, 'auto')
             toesFkRoots = createRoots(toesFkControllerList)
             toesFkAuto = createRoots(toesFkControllerList, 'auto')
@@ -928,10 +939,62 @@ class RigAuto(object):
                         for axis in ('X', 'Y', 'Z'):
                             toesGeneralCtrIkOrFk.attr('rotate%s' % axis).connect(iAuto.attr('rotate%s' % axis))
 
+            # ik ctr autos
+            for i, autoGrp in enumerate(footIkAuto[1:]):
+                footIkControllerList[0].attr(footIkAttrTypes[i]).connect(autoGrp.rotateZ)
+                if 'footTiltIn' in str(autoGrp):
+                    autoGrp.attr('minRotZLimitEnable').set(True)
+                    autoGrp.attr('minRotZLimit').set(0)
+                    footIkAttrTypes.insert(i, footIkAttrTypes[i])  # we have two tilt elements, so we add again the attr
+
+                elif 'footTiltOut' in str(autoGrp):
+                    autoGrp.attr('maxRotZLimitEnable').set(True)
+                    autoGrp.attr('maxRotZLimit').set(0)
+
+            # footRollAuto
+            for autoGrp in footRollAuto:
+                logger.debug('footRoolAutoGrp: %s, %s' % (autoGrp, type(autoGrp)))
+                animNode = pm.createNode('animCurveTU', name='%s_animNode' % autoGrp)
+                footIkControllerList[0].attr(footIkAttrTypes[-1]).connect(animNode.input)
+                animNode.output.connect(autoGrp.rotateZ)
+
+                if 'heel' in str(autoGrp).lower():
+                    animNode.addKeyframe(-50, 50)
+                    animNode.addKeyframe(0, 0)
+                    animNode.addKeyframe(50, 0)
+                    keyFrames = range(animNode.numKeys())
+                    animNode.setTangentTypes(keyFrames, inTangentType='linear', outTangentType='linear')
+                    animNode.setTangentTypes([keyFrames[0],keyFrames[-1]], inTangentType='clamped', outTangentType='clamped')
+                    animNode.setPostInfinityType('linear')
+                    animNode.setPreInfinityType('linear')
+
+                elif 'toes' in str(autoGrp).lower():
+                    animNode.addKeyframe(0, 0)
+                    animNode.addKeyframe(50, 0)
+                    animNode.addKeyframe(100, -90)
+                    keyFrames = range(animNode.numKeys())
+                    animNode.setTangentTypes(keyFrames, inTangentType='linear', outTangentType='linear')
+                    animNode.setTangentTypes([keyFrames[0], keyFrames[-1]], inTangentType='clamped',
+                                             outTangentType='clamped')
+                    animNode.setPostInfinityType('linear')
+                    animNode.setPreInfinityType('linear')
+
+                elif 'ball' in str(autoGrp).lower():
+                    animNode.addKeyframe(-50, 0)
+                    animNode.addKeyframe(0, 0)
+                    animNode.addKeyframe(50, -60)
+                    animNode.addKeyframe(100, 40)
+                    keyFrames = range(animNode.numKeys())
+                    animNode.setTangentTypes(keyFrames, inTangentType='linear', outTangentType='linear')
+                    animNode.setTangentTypes([keyFrames[0], keyFrames[-1]], inTangentType='clamped',
+                                             outTangentType='clamped')
+                    animNode.setPostInfinityType('linear')
+                    animNode.setPreInfinityType('linear')
+
             # orient constraint main to ik or fk foot
             for i, mainJoint in enumerate(footMainJointsList):
                 if i == 0:
-                    orientConstraint = pm.orientConstraint(footIkControllerList[-1], footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+                    orientConstraint = pm.orientConstraint(footIkControllerList[-1], footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_main_blending_orientConstraint' % str(mainJoint))
                     ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(footIkControllerList[-1])))  # shape with bleeding attribute
                     ikFkshape.ikFk.connect(footIkControllerList[i].visibility)  # all foot chain visibility
 
@@ -945,22 +1008,22 @@ class RigAuto(object):
                     plusMinusIkFk.output1D.connect(footFkControllerList[i].getShape().visibility)
 
                 else:
-                    orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+                    orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_orientConstraint' % str(mainJoint))
 
 
                 lockAndHideAttr(footFkControllerList[i], True, False, False)
                 pm.setAttr('%s.radi' % footFkControllerList[i], channelBox=False, keyable=False)
 
                 # connect to deform skeleton fixme: no tips in main // orient constraint names // toes names and foot names
-                orientDeformConstraint = pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+                orientDeformConstraint = pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_orientConstraint' % str(footJoints[i]))
 
             # main ik fk toes
             for i, mainJoint in enumerate(toesMainJointsList):
                 orientConstraint = pm.orientConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=True,
-                                                       name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+                                                       name='%s_orientConstraint' % str(mainJoint))
 
                 pointConstraint = pm.pointConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=False,
-                                                       name='%s_main_blending_%s_%s_pointConstraint' % (self.chName, zone, side))
+                                                       name='%s_pointConstraint' % str(mainJoint))
 
                 ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
                 ikFkshape.ikFk.connect(pointConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
@@ -979,16 +1042,16 @@ class RigAuto(object):
                 lockAndHideAttr(toesFkControllerList[i], True, False, False)
                 pm.setAttr('%s.radi' % toesFkControllerList[i], channelBox=False, keyable=False)
 
-                # connect to deform skeleton fixme no tips in main
-                orientDeformConstraint = pm.orientConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_main_%s_%s_orientConstraint' % (self.chName, zone, side))
-                pointDeformConstraint = pm.pointConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_main_%s_%s_pointConstraint' % (self.chName, zone, side))
+                # connect to deform skeleton
+                orientDeformConstraint = pm.orientConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_orientConstraint' % str(toesJoints[i]))
+                pointDeformConstraint = pm.pointConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_pointConstraint' % str(toesJoints[i]))
 
-
-            #legIkControllerList = legIkControllerList + footIkControllersList
-            #legFkControllersList = legFkControllersList + footFkControllersList
+            return footIkControllerList + toesIkControllerList, footFkControllerList + toesFkControllerList
 
         if footAuto:
-            foot_auto(side)
+            footIkCtrList, footFkCtrList = foot_auto(side)
+            legIkControllerList = legIkControllerList + footIkCtrList
+            legFkControllersList = legFkControllersList + footFkCtrList
         else:
             # parent shape
             legIkControl.addChild(ikFkshape, r=True, s=True)
@@ -1002,7 +1065,6 @@ class RigAuto(object):
         self.fkControllers[zoneSide] = legFkControllersList
         self.ikHandles[zoneSide] = ikHandle
 
-        # TODO: in this method, it's possible don't export ikController, because it's in the foot. test it
         return legIkControllerList, legFkControllersList
 
 
