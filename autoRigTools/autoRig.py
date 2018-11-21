@@ -82,7 +82,7 @@ class RigAuto(object):
 
                 # create unknown node
                 connectionTypes = ['ikControllers', 'fkControllers']
-                moduleNode = pm.createNode('unknown', name=nodeName)
+                moduleNode = pm.createNode('script', name=nodeName)
                 pm.addAttr(moduleNode, ln='module', sn='module', attributeType='message')
                 for connection in connectionTypes:
                     pm.addAttr(moduleNode, ln=connection, sn=connection,  attributeType='message')
@@ -616,10 +616,10 @@ class RigAuto(object):
 
         # duplicate joints
         for i in legJoints:
-            controllerName = str(i).split('_')[1]
+            controllerName = str(i).split('_')[1] if 'end' not in str(i) else 'end'  # if is a end joint, rename end
             legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
-            legIkJointList.append(i.duplicate(po=True, name='%s_ik_joint_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
-            legMainJointList.append(i.duplicate(po=True, name='%s_main_joint_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+            legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+            legMainJointList.append(i.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
             NameIdList.append(controllerName)
 
         # reconstruct hierarchy
@@ -775,6 +775,14 @@ class RigAuto(object):
                                      vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
                 pm.xform(footFkCtr, ws=True, m=matrix)  # new transform matrix with vector ajust
 
+                if not footFkControllerList:
+                    # create empty grp, useful for ikFk snap
+                    fkSyncGrp = pm.group(empty=True, name='%s_fkSync' % str(footFkCtr))
+                    pm.xform(fkSyncGrp, ws=True, m=matrix)
+                    # parent with main
+                    footMain.addChild(fkSyncGrp)
+
+
                 # fk control Shape
                 shape = self.create_controller('%sShape' % str(footFkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
                 footFkCtr.addChild(shape.getShape(), s=True, r=True)
@@ -808,7 +816,7 @@ class RigAuto(object):
                     logger.debug('foot controller name: %s' % controllerName)
                     toeFkCtr = joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
                     toeMainJnt = joint.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0]
-                    toeIkCtr = joint.duplicate(po=True, name='%s_Ik_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
+                    toeIkCtr = joint.duplicate(po=True, name='%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
 
                     # get transformMatrix and orient new controller
                     matrix = pm.xform(toeFkCtr, ws=True, q=True, m=True)

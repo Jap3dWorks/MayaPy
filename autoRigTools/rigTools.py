@@ -27,7 +27,6 @@ def snapIkFkLeg(name, zone, side):
 
     ikFkNode = pm.PyNode('%s_%s_%s_attrShape' % (name, zone, side))
     # find fk Controllers
-    # review: it's is a little stupid ask for the zone and then put upperleg manually
     fkControllers = [i for i in pm.ls() if re.match('^%s_fk_%s_%s.*ctr$' % (name, zone, side), str(i))]
     logger.debug('fk controls: %s' % fkControllers)
 
@@ -81,7 +80,7 @@ def snapIkFkLeg(name, zone, side):
         return
 
     # fk to ik
-    if ikFkNode.ikFk.get():
+    elif ikFkNode.ikFk.get():
         for i, fkCntr in enumerate(fkControllers):
             fkCntr.setRotation(ikJoints[i].getRotation('world'), 'world')
 
