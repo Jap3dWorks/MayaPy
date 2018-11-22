@@ -1,4 +1,5 @@
 # tools for use the rig
+
 from maya import cmds
 from maya import OpenMaya
 import re
@@ -9,110 +10,154 @@ logging.basicConfig()
 logger = logging.getLogger('rigTools:')
 logger.setLevel(logging.DEBUG)
 
-def snapIkFkLeg(name, zone, side):
+
+def snapIkFk(name, side):
     """
-    change to ik and fk and snap controllers
+    snap ik fk or fk ik
     args:
         name(str): character name
-        zone(str): zone of controller
         side(str): left or right
-        direction(bool): 1: ik to fk. 2: fk to ik
     """
-    # offset quaternion
-    # TODO: save quaternions offset when construct rig. 'unknown' node with attributes
-    quaternionOffset = pm.datatypes.Quaternion(0.511546727083, -0.488180239267, -0.511546727083, 0.488180239267)
+    attrShape = '%s_leg_%s_attrShape' % (name, side)
+    attrValue = cmds.getAttr('%s.ikFk' % attrShape)
 
-    if side == 'right':
-        quaternionOffset = pm.datatypes.Quaternion(-0.488180239267, -0.511546727083, 0.488180239267, 0.511546727083)
+    # find fk ik Controllers and main
+    fkControllers = [i for i in cmds.ls() if re.match('^%s_fk_(leg|foot)_*%s_((?!end).).*ctr$' % (name, side), str(i))]
+    ikControllers = [i for i in cmds.ls() if re.match('^%s_ik_(leg|foot)_*%s_((?!end).).*ctr$' % (name, side), str(i))]
+    mainJoints = [i for i in cmds.ls() if re.match('^%s_main_(leg|foot)_*%s_((?!end).).*joint$' % (name, side), str(i))]
 
-    ikFkNode = pm.PyNode('%s_%s_%s_attrShape' % (name, zone, side))
-    # find fk Controllers
-    fkControllers = [i for i in pm.ls() if re.match('^%s_fk_%s_%s.*ctr$' % (name, zone, side), str(i))]
-    logger.debug('fk controls: %s' % fkControllers)
+    # arrange lists to be sincronized
+    ikMatchControllers = []
+    fkMatchControllers = []
+    for fkCtr in list(fkControllers):
+        try:
+            elemetnIndex = ikControllers.index(fkCtr.replace('fk', 'ik'))
+            ikMatchControllers.append(ikControllers.pop(elemetnIndex))
+            fkMatchControllers.append(fkCtr)
+        except:
+            pass
 
-    # find ik joints
-    ikJoints = [i for i in pm.ls() if re.match('^%s_ik_joint_%s_%s.*joint$' % (name, zone, side), str(i))]
-    logger.debug('ik joints: %s' % ikJoints)
+    # ik -> fk
+    if attrValue:
+        # copy ro from main joints, this can give som errors in toes, because main does not has general toe ctr
+        # so we exclude foot and toes
+        for i, mainj in enumerate(mainJoints[:2]):
+            cmds.xform(fkControllers[i], a=True, eu=True, ro=cmds.xform(mainj, a=True, eu=True, q=True, ro=True))
 
-    # find ik control
-    try:
-        ikControl = pm.PyNode('%s_ik_%s_%s_ctr' % (name, zone, side))
+        # controllers that match between ik and fk, this fix erros with toes tODO: test snap with main. error with footwalk toes
+        for i, fkCtr in enumerate(fkMatchControllers):
+            if i == 0:
+                # first ctr, foot ctr in world space
+                cmds.xform(fkCtr, a=True, ws=True, ro=cmds.xform('%s_fkSync' % fkCtr, a=True, ws=True, q=True, ro=True))
+            else:
+                cmds.xform(fkCtr, a=True, eu=True,
+                           ro=cmds.xform(ikMatchControllers[i], a=True, eu=True, q=True, ro=True))
 
-    except:
-        return logger.info('does not found: %s_ik_%s_%s_ctr' % (name, zone, side))
+        cmds.setAttr('%s.ikFk' % attrShape, not attrValue)
 
-    # ik to fk
-    if not ikFkNode.ikFk.get():
-        # poleVector
-        poleVector = pm.PyNode('%s_ik_%s_%s_pole_ctr' % (name, zone, side))
+    # fk -> ik
+    elif not attrValue:
+        # reset walk values
+        for attr in ('Heel', 'Tilt', 'Toes', 'Ball', 'FootRoll'):
+            cmds.setAttr('%s.%s' % (ikMatchControllers[0], attr[0].lower() + attr[1:]), 0)
 
-        #rotation offset
-        #mquaternion = fkControllers[-1].getRotation(space='world', quaternion=True)
-        #logger.debug('mquaternion : %s, %s, %s, %s ' % (mquaternion.x, mquaternion.y, mquaternion.z, mquaternion.w))
-        #mquaternion.invertIt()
-        #logger.debug('mquaternion : %s, %s, %s, %s ' % (mquaternion.x, mquaternion.y, mquaternion.z, mquaternion.w))
+            if attr == 'Tilt':  # we have two tilts
+                for inOut in ('In', 'Out'):
+                    ctrIndex = ikControllers.index('%s_ik_foot_%s_foot%s%s_ctr' % (name, side, attr, inOut))
+                    cmds.xform(ikControllers[ctrIndex], a=True, t=(0, 0, 0), ro=(0, 0, 0), s=(1, 1, 1))
+            elif attr == 'FootRoll':
+                continue
+            else:
+                ctrIndex = ikControllers.index('%s_ik_foot_%s_foot%s_ctr' % (name, side, attr))
+                cmds.xform(ikControllers[ctrIndex], a=True, t=(0, 0, 0), ro=(0, 0, 0), s=(1, 1, 1))
 
-        # setTransforms
-        ikControl.setTranslation(fkControllers[-1].getTranslation('world'), 'world')
-        # setRotation quaternion
-        quaternionOffset.invertIt()
-        ikControl.setRotation(quaternionOffset*fkControllers[-1].getRotation(space='world', quaternion=True), 'world')
-        # setScale
-        # ikControl.setScale(fkControllers[-1].getScale())
+        # snap foot and toes
+        for i, ikCtr in enumerate(ikMatchControllers):
+            if i == 0:
+                # first ctr, foot ctr in world space
+                cmds.xform(ikCtr, ws=True, m=cmds.xform(fkMatchControllers[i], ws=True, q=True, m=True))
+            else:
+                cmds.xform(ikCtr, a=True, eu=True,
+                           ro=cmds.xform(fkMatchControllers[i], a=True, eu=True, q=True, ro=True))
 
-        # set ikfk attr
-        ikFkNode.ikFk.set(1)
+        # poleVector, use vector additive propiety
+        upperLegPos = cmds.xform(mainJoints[0], q=True, ws=True, t=True)
+        lowerLegPos = cmds.xform(mainJoints[1], q=True, ws=True, t=True)
+        footPos = cmds.xform(mainJoints[2], q=True, ws=True, t=True)
 
-        # set poleVector
-        kneePoss = fkControllers[1].getTranslation('world')
-        vector1 = kneePoss - fkControllers[0].getTranslation('world')
+        vector1 = OpenMaya.MVector(lowerLegPos[0] - upperLegPos[0], lowerLegPos[1] - upperLegPos[1],
+                                   lowerLegPos[2] - upperLegPos[2])
         vector1.normalize()
-        vector2 = kneePoss - fkControllers[-1].getTranslation('world')
+        vector2 = OpenMaya.MVector(lowerLegPos[0] - footPos[0], lowerLegPos[1] - footPos[1],
+                                   lowerLegPos[2] - footPos[2])
         vector2.normalize()
 
-        # poleVector vector
-        pvVector = vector2 + vector1
-        pvVector.normalize()
+        poleVectorPos = vector1 + vector2
+        poleVectorPos.normalize()
+        poleVectorPos = poleVectorPos * 20
 
-        # set polevector position
-        poleVector.setTranslation(pvVector * 25 + kneePoss, 'world')
+        # pole vector is the first index of the ikcontrollers. TODO. index for pole vector
+        cmds.xform(ikControllers[0], ws=True, t=(
+        poleVectorPos.x + lowerLegPos[0], poleVectorPos.y + lowerLegPos[1], poleVectorPos.z + lowerLegPos[2]))
 
-        return
-
-    # fk to ik
-    elif ikFkNode.ikFk.get():
-        for i, fkCntr in enumerate(fkControllers):
-            fkCntr.setRotation(ikJoints[i].getRotation('world'), 'world')
-
-        ikFkNode.ikFk.set(0)
-        return
+        cmds.setAttr('%s.ikFk' % attrShape, not attrValue)
 
 
-def snapIsolateHead(name, zone, controller, point, orient, isolate):
+if __name__ == '__main__':
+    snapIkFk('akona', 'left')
+
+"""
+import pymel.core as pm
+# create 2 cubes, pcube1 and pCube2 with diferent orientations but the same shape position
+cube01 = pm.PyNode('pCube1')
+cube02 = pm.PyNode('pCube2')
+
+Offset = cube01.getRotation(space='world', quaternion=True)*cube02.getRotation(space='world', quaternion=True).invertIt()
+print Offset
+
+Offset.invertIt()
+
+# now rotate cube 1 and apply the line below
+cube02.setRotation(Offset*cube01.getRotation(space='world', quaternion=True), 'world')
+"""
+
+
+def jordiAmposta_Leccion4_tarea2_bonus(name, zone, controller, point, orient):
     """
-    set isolate to 0 or 1 and snap controllers
+    isolate to 0 or 1 and snap controllers
     args:
         name(str): character name
         zone(str): zone of controller
         controller(str): controller type
         point (bool): if true, snap translation
         orient (bool): if true, snap rotation
-        isolate(bool): if true change to isolate mode, if false change to normal mode
     """
     headControl = '%s_IK_%s_%s_1_ctr' % (name, zone, controller)
 
-    headControlTranslate = cmds.xform(headControl, q=True, ws=True, t=True)
-    print('translate:%s' % headControlTranslate)
-    headControlRotate = cmds.xform(headControl, q=True, ws=True, ro=True)
-    print('orient:%s' % headControlRotate)
+    # check if exist
+    if not cmds.objExists(headControl):
+        print ('%s do not exists' % headControl)
+        return
+
+    # save transforms
+    headControlTranslate = cmds.xform(headControl, q=True, ws=True, m=True)
 
     if orient:
-        print 'set orient'
+        # set orient
+        print ('set orient')
+        isolate = not cmds.getAttr('%s.isolateOrient' % headControl)
         cmds.setAttr('%s.isolateOrient' % headControl, isolate)
-        cmds.xform(headControl, ws=True, ro=headControlRotate)
 
     if point:
-        print 'set point'
+        # set position
+        print ('set point')
+        isolate = not cmds.getAttr('%s.isolatePoint' % headControl)
         cmds.setAttr('%s.isolatePoint' % headControl, isolate)
-        cmds.xform(headControl, ws=True, t=headControlTranslate)
+
+    # Transform head control
+    cmds.xform(headControl, ws=True, m=headControlTranslate)
+
+
+if __name__ == '__main__':
+    jordiAmposta_Leccion4_tarea2_bonus('akona', 'neckHead', 'head', True, True)
 

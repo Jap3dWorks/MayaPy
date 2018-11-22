@@ -384,8 +384,7 @@ class RigAuto(object):
                 neckHeadIKCtr = self.create_controller('%s_IK_%s_%s_1_ctr' % (self.chName, zone, ctrType), '%sIk' % ctrType, 1, 17)
                 logger.debug('neckHead controller: %s' % neckHeadIKCtr)
 
-                # try make head deform more "natural"
-                if n == neckHeadCurve.numCVs() - 1:
+                if n == neckHeadCurve.numCVs() - 1:  # las iteration
                     lastSpineIkController = neckHeadIKCtrList[-1].getTranslation('world')
                     neckHeadIKCtr.setTranslation((point[0], point[1], point[2]))
                 else:
@@ -396,23 +395,31 @@ class RigAuto(object):
 
                 # create FK controllers, only with the first ik controller
                 if len(neckHeadIKCtrList) == 1:
-                    neckHeadFKCtr = self.create_controller('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'neckFk',1,4)
-                    neckHeadFKCtr.setTranslation(neckHeadJoints[1].getTranslation('world'), 'world')
+                    neckHeadFKCtr = self.create_controller('%s_FK_%s_%s_1_ctr' % (self.chName, zone, ctrType), 'neckFk1',1,4)
+                    neckHeadFKCtr.setTranslation(neckHeadJoints[0].getTranslation('world'), 'world')
                     neckHeadFKCtrList.append(neckHeadFKCtr)
-                    # Fk hierarchy, if we have more fk controllers. not the case
-                    if len(neckHeadFKCtrList) > 1:
+
+                    neckHeadFKCtr2 = self.create_controller('%s_FK_%s_%s_2_ctr' % (self.chName, zone, ctrType), 'neckFk', 1, 4)
+                    neckHeadFKCtr2.setTranslation(neckHeadJoints[1].getTranslation('world'), 'world')
+                    neckHeadFKCtrList.append(neckHeadFKCtr2)
+                    # create hierarchy
+                    neckHeadFKCtr.addChild(neckHeadFKCtr2)
+                    neckHeadFKCtr2.addChild(neckHeadIKCtr)
+
+                    # Fk hierarchy, if we have more fk controllers. not the case TODO: more procedural
+                    if len(neckHeadFKCtrList) > 2:
                         neckHeadFKCtrList[n-1].addChild(neckHeadFKCtr)
                         logger.debug('parent %s, child %s' % (neckHeadFKCtrList[-1], neckHeadFKCtr))
 
         # configure ctr hierarchy
         neckHeadFKCtrList[-1].addChild(neckHeadIKCtrList[-1])
         neckHeadIKCtrList[-1].addChild(neckHeadDrvList[-2])  # add the penultimate driver too
-        self.ikControllers['spine'][-1].addChild(neckHeadIKCtrList[0])  # ik controller child of last spine controller
+        #self.ikControllers['spine'][-1].addChild(neckHeadIKCtrList[0])  # ik controller child of last spine controller
         neckHeadIKCtrList[0].addChild(neckHeadDrvList[1])
         # rename head control
         neckHeadIKCtrList[-1].rename('%s_IK_%s_head_1_ctr' % (self.chName, zone))  # review: better here or above?
         # Fk parent to last ik spine controller
-        self.ikControllers['spine'][-1].addChild(neckHeadFKCtrList[-1])
+        self.ikControllers['spine'][-1].addChild(neckHeadFKCtrList[0])
 
         # create roots grp
         neckHeadFKCtrRoots = createRoots(neckHeadFKCtrList)
@@ -667,11 +674,50 @@ class RigAuto(object):
         legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
         relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
         self.ctrGrp.addChild(legPoleController)
+        pm.addAttr(legPoleController, ln='polePosition', at='enum', en="world:root:foot", k=True)
+        # save poleVector
+        legIkControllerList.append(legPoleController)
+
         # constraint poleVector
         pm.poleVectorConstraint(legPoleController, ikHandle)
 
         # root poleVector
+        legPoleVectorAuto = createRoots([legPoleController])
         createRoots([legPoleController])
+
+        # TODO: abstract more
+        # poleVectorAttributes
+        poleAttrgrp=[]
+        legPoleAnimNodes=[]
+        for attr in ('world', 'root', 'foot'):
+            legPoleGrp = pm.group(empty=True, name= '%s_ik_%s_%s_pole%s_grp' % (self.chName, zone, attr.capitalize(), side))
+            poleAttrgrp.append(legPoleGrp)
+            pm.xform(legPoleGrp, ws=True, m=pm.xform(legPoleVectorAuto, ws=True, m=True, q=True))
+            legPoleAnim = pm.createNode('animCurveTU', name='%s_ik_%s_%s_pole%s_animNode' % (self.chName, zone, attr.capitalize(), side))
+            legPoleController.attr('polePosition').connect(legPoleAnim.input)
+            legPoleAnimNodes.append(legPoleAnim)
+
+            if attr == 'world':
+                legPoleAnim.addKeyframe(0, 1)
+                legPoleAnim.addKeyframe(1, 0)
+                legPoleAnim.addKeyframe(2, 0)
+                self.ctrGrp.addChild(legPoleGrp)
+            elif attr == 'root':
+                legPoleAnim.addKeyframe(0, 0)
+                legPoleAnim.addKeyframe(1, 1)
+                legPoleAnim.addKeyframe(2, 0)
+                self.fkControllers['spine'][0].addChild(legPoleGrp)
+            elif attr == 'foot':
+                legPoleAnim.addKeyframe(0, 0)
+                legPoleAnim.addKeyframe(1, 0)
+                legPoleAnim.addKeyframe(2, 1)
+                legIkControl.addChild(legPoleGrp)
+
+        # once node are created, connect them
+        polegrpsParentCnstr=pm.parentConstraint(poleAttrgrp[0],poleAttrgrp[1],poleAttrgrp[2], legPoleVectorAuto, maintainOffset=False, name='%s_pointConstraint' % legPoleVectorAuto)
+        for i, poleAttr in enumerate(poleAttrgrp):
+            legPoleAnimNodes[i].output.connect(polegrpsParentCnstr.attr('%sW%s' % (str(poleAttr), i)))
+
 
         # main blending
         # unknown node to store blend info
@@ -868,9 +914,9 @@ class RigAuto(object):
                 logger.debug('toeIkCtrParents: %s' % (toeIkCtrParents))
                 footMainJointsList[-1].addChild(toeMainChain[0])
 
-            # ik foot ctr
+            # ik foot ctr TODO: simplify this section
             # TODO: create the rest of the controllers here too
-            footIkCtr = self.create_controller('%s_ik_%s_%s_foot_ctr' % (self.chName, zone, side), '%sIk' % (zone), 1, 17)
+            footIkCtr = self.create_controller('%s_ik_%s_%s_foot_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
             self.ctrGrp.addChild(footIkCtr)
             footIkControllerList.append(footIkCtr)  # append joint to list
             footIkAttrTypes = ['heel', 'tilt', 'toes', 'ball', 'footRoll']
@@ -891,7 +937,6 @@ class RigAuto(object):
 
                 if 'tilt' not in ctrType.lower():
                     footRollCtr.append(footIkCtrWalk)  # save footRoll controllers
-
                 if ctrType == 'footToes':
                     footToesIkCtr = footIkCtrWalk
                 elif ctrType == 'footBall':
@@ -906,7 +951,11 @@ class RigAuto(object):
                                                 firstfootFkMatrix[8],firstfootFkMatrix[9],firstfootFkMatrix[10],firstfootFkMatrix[11],
                                                 middleToeCtrMatrix[12], middleToeCtrMatrix[13], middleToeCtrMatrix[14], middleToeCtrMatrix[15]]
             pm.xform(footBallIkCtr, ws=True, m=footBallIkMatrix)
-            footBallIkCtr.addChild(ikHandle)  # add ik handle too
+
+            for i in legIkControl.listRelatives(c=True, type='transform'):  # traspase childs from previous leg controller
+                footBallIkCtr.addChild(i)
+
+            #footBallIkCtr.addChild(ikHandle)  # add ik handle too
             # parent toes Ik ctr to footToes
             logger.debug('footToesIkCtr: %s, %s' % (footToesIkCtr, type(footToesIkCtr)))
             logger.debug('toeIkCtrParents: %s' % toeIkCtrParents)
@@ -916,7 +965,7 @@ class RigAuto(object):
             pm.delete(legIkControl.firstParent())  # if foot, we do not need this controller
             legIkControllerList.remove(legIkControl)
 
-            # toes general Controller ik Fk review: no side review: ik ctrllers
+            # toes general Controller ik Fk review: no side review: ik ctrllers  simplyfy with for
             toesFkGeneralController = self.create_controller('%s_fk_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
             pm.xform(toesFkGeneralController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe review
             toesIkGeneralController = self.create_controller('%s_ik_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
