@@ -761,6 +761,7 @@ class RigAuto(object):
         ikFkshape.ikFk.connect(legPoleController.visibility)
         ikFkshape.ikFk.connect(legIkControl.visibility)
 
+        # function for create foots, Review: maybe here another to create hands
         def foot_auto(side, zone='foot'):
             """
             # TODO: organitze and optimize this Func
@@ -828,7 +829,6 @@ class RigAuto(object):
                     # parent with main
                     footMain.addChild(fkSyncGrp)
 
-
                 # fk control Shape
                 shape = self.create_controller('%sShape' % str(footFkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
                 footFkCtr.addChild(shape.getShape(), s=True, r=True)
@@ -881,10 +881,10 @@ class RigAuto(object):
                     pm.xform(toeIkCtr, ws=True, m=matrix)
 
                     # fk ik toe control Shape
-                    shape = self.create_controller('%sShape' % str(toeFkCtr), '%sFk' % (controllerName), 1, fkColor)
+                    shape = self.create_controller('%sShape' % str(toeFkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
                     toeFkCtr.addChild(shape.getShape(), s=True, r=True)
                     pm.delete(shape)
-                    shape = self.create_controller('%sShape' % str(toeIkCtr), '%sFk' % (controllerName), 1, fkColor)
+                    shape = self.create_controller('%sShape' % str(toeIkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
                     toeIkCtr.addChild(shape.getShape(), s=True, r=True)
                     pm.delete(shape)
 
@@ -927,22 +927,27 @@ class RigAuto(object):
             pm.addAttr(footIkCtr, longName='showControls', shortName='showControls', type='bool', defaultValue=True, k=False)
             pm.setAttr('%s.showControls' % str(footIkCtr), channelBox=True)
 
-            footRollCtr=[]  # list of footRoll ctr
+            footFootRollCtr=[]  # list of footRoll ctr
 
-            footIkCtrTypes = ('footHeel', 'footTiltIn', 'footTiltOut', 'footToes', 'footBall')
-            for ctrType in footIkCtrTypes:
-                footIkCtrWalk = self.create_controller('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, ctrType), '%sIk_%s' % (ctrType, side), 1, 17)
-                footIkControllerList[-1].addChild(footIkCtrWalk)
-                footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
+            for ctrType in footIkAttrTypes[:-1]:
+                if ctrType == 'tilt':
+                    for inOut in ('In', 'Out'):
+                        footIkCtrWalk = self.create_controller('%s_ik_%s_%s_foot%s%s_ctr' % (self.chName, zone, side, ctrType.capitalize(), inOut),'foot%s%sIk_%s' % (ctrType.capitalize(),inOut, side), 1, 17)
+                        footIkControllerList[-1].addChild(footIkCtrWalk)
+                        footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
+                        footIkControllerList.append(footIkCtrWalk)
+                else:
+                    footIkCtrWalk = self.create_controller('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, ctrType), 'foot%sIk_%s' % (ctrType.capitalize(), side), 1, 17)
+                    footIkControllerList[-1].addChild(footIkCtrWalk)
+                    footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
+                    footFootRollCtr.append(footIkCtrWalk)  # save footRoll controllers
 
-                if 'tilt' not in ctrType.lower():
-                    footRollCtr.append(footIkCtrWalk)  # save footRoll controllers
-                if ctrType == 'footToes':
-                    footToesIkCtr = footIkCtrWalk
-                elif ctrType == 'footBall':
-                    footBallIkCtr = footIkCtrWalk
+                    if ctrType == 'toes':
+                        footToesIkCtr = footIkCtrWalk
+                    elif ctrType == 'ball':
+                        footBallIkCtr = footIkCtrWalk
 
-                footIkControllerList.append(footIkCtrWalk)
+                    footIkControllerList.append(footIkCtrWalk)
 
             # once all are created, translate if necessary
             pm.xform(footIkCtr, ws=True, m=firstfootFkMatrix)
@@ -966,9 +971,9 @@ class RigAuto(object):
             legIkControllerList.remove(legIkControl)
 
             # toes general Controller ik Fk review: no side review: ik ctrllers  simplyfy with for
-            toesFkGeneralController = self.create_controller('%s_fk_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            toesFkGeneralController = self.create_controller('%s_fk_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
             pm.xform(toesFkGeneralController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe review
-            toesIkGeneralController = self.create_controller('%s_ik_%s_%s_toesGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            toesIkGeneralController = self.create_controller('%s_ik_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
             pm.xform(toesIkGeneralController, ws=True, m=middleToeCtrMatrix)
             # parent and store to lists
             footFkControllerList[-1].addChild(toesFkGeneralController)
@@ -980,7 +985,7 @@ class RigAuto(object):
             footFkRoots = createRoots(footFkControllerList)
             footFkAuto = createRoots(footFkControllerList, 'auto')
             footIkRoots = createRoots(footIkControllerList)
-            footRollAuto = createRoots(footRollCtr, 'footRollAuto')
+            footRollAuto = createRoots(footFootRollCtr, 'footRollAuto')
             footIkAuto = createRoots(footIkControllerList, 'auto')
             toesFkRoots = createRoots(toesFkControllerList)
             toesFkAuto = createRoots(toesFkControllerList, 'auto')
@@ -995,6 +1000,9 @@ class RigAuto(object):
                     if 'toe' in str(iAuto) and 'toesGeneral' not in str(iAuto):
                         for axis in ('X', 'Y', 'Z'):
                             toesGeneralCtrIkOrFk.attr('rotate%s' % axis).connect(iAuto.attr('rotate%s' % axis))
+
+            # lock and hide attributes. after root creation
+            lockAndHideAttr(footIkControllerList[1:], True, False, True)
 
             # ik ctr autos
             for i, autoGrp in enumerate(footIkAuto[1:]):
@@ -1096,7 +1104,17 @@ class RigAuto(object):
                 plusMinusIkFk.output1D.connect(pointConstraint.attr('%sW1' % str(toesFkControllerList[i])))
                 plusMinusIkFk.output1D.connect(toesFkControllerList[i].visibility)
 
-                lockAndHideAttr(toesFkControllerList[i], True, False, False)
+                #lockAndHideAttr(toesFkControllerList[i], True, False, False)
+                #lockAndHideAttr(toesIkControllerList[i], True, False, False)
+                # review: i don't know if this is correct
+                for axis in ('X', 'Y', 'Z'):
+                    for minMax in ('min', 'max'):
+                        value = -.7 if minMax == 'min' else .7
+                        toesFkControllerList[i].attr('%sTrans%sLimitEnable' % (minMax,axis)).set(True)
+                        toesFkControllerList[i].attr('%sTrans%sLimit' % (minMax, axis)).set(value)
+                        toesIkControllerList[i].attr('%sTrans%sLimitEnable' % (minMax, axis)).set(True)
+                        toesIkControllerList[i].attr('%sTrans%sLimit' % (minMax, axis)).set(value)
+
                 pm.setAttr('%s.radi' % toesFkControllerList[i], channelBox=False, keyable=False)
 
                 # connect to deform skeleton
@@ -1381,18 +1399,37 @@ def createRoots(list, sufix='root'):
     return roots
 
 def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
-    if translate:
-        obj.translate.lock()
-        for axis in ('X', 'Y', 'Z'):
-            pm.setAttr('%s.translate%s' % (str(obj), axis), channelBox=False, keyable=False)
-    if rotate:
-        obj.rotate.lock()
-        for axis in ('X', 'Y', 'Z'):
-            pm.setAttr('%s.rotate%s' % (str(obj), axis), channelBox=False, keyable=False)
-    if scale:
-        obj.scale.lock()
-        for axis in ('X', 'Y', 'Z'):
-            pm.setAttr('%s.scale%s' % (str(obj), axis), channelBox=False, keyable=False)
+    """
+    lock hide and limit attributes
+    Args:
+        obj:
+        translate:
+        rotate:
+        scale:
+        limitTranslate (list): (min, max). pe (10,10)   (false, 10)
+        limitRotate (list): (min, max)
+        limitScale (list): (min, max)
+    """
+    if isinstance(obj, list):
+        itemList = obj
+    else:
+        itemList = []
+        itemList.append(obj)
+
+    for item in itemList:
+        if translate:
+            item.translate.lock()
+            for axis in ('X', 'Y', 'Z'):
+                pm.setAttr('%s.translate%s' % (str(item), axis), channelBox=False, keyable=False)
+        if rotate:
+            item.rotate.lock()
+            for axis in ('X', 'Y', 'Z'):
+                pm.setAttr('%s.rotate%s' % (str(item), axis), channelBox=False, keyable=False)
+        if scale:
+            item.scale.lock()
+            for axis in ('X', 'Y', 'Z'):
+                pm.setAttr('%s.scale%s' % (str(item), axis), channelBox=False, keyable=False)
+
 
 
 def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
