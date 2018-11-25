@@ -50,7 +50,7 @@ def ctrSaveJson(typeController, name, path):
     # here save list attributes
     controllerAttr = []
 
-    curveShapes = selection.listRelatives(s=True, c=True)
+    curveShapes = selection.listRelatives(s=True, c=True, type='nurbsCurve')
     for curveShape in curveShapes:
         print curveShape
         if not isinstance(curveShape, pm.nodetypes.NurbsCurve):
@@ -120,6 +120,56 @@ def ctrLoadJson(typeController, name, path, SFactor=1, ColorIndex = 4):
     # return controller name, and saved matrix transform
     return transform.fullPathName(), controllerDict[typeController][1]
 
+
+def mirrorControllers():
+    """
+    mirror the selected controllers.
+    like mirror joints, behaviour
+    Returns: list with mirrored controllers
+    """
+    selection = pm.ls(sl=True)
+
+    mirroredControllers =[]
+    for sel in selection:
+        # sides the script will detect
+        sides = ['left', 'right']
+        side = None
+
+        for i, s in enumerate(sides):
+            if s in str(sel):
+                oldSide = s
+                side = sides[(i + 1) % 2]
+
+        if not side:
+            # if side is not defined, don't mirror
+            continue
+
+        pm.xform(sel, ztp=True)
+        # duplicate controller
+        newController = sel.duplicate(name=str(sel).replace(oldSide, side))[0]
+        group = pm.group(empty=True)
+
+        # symmetrize to -X or +X
+        group.addChild(newController)
+        group.scaleX.set(-1)
+
+        newController.setParent(world=True)
+        matrix = pm.xform(q=True, ws=True, m=True)
+        # orient the transform matrix vectors to correct side
+        pm.xform(group, ws=True,
+                 m=(-matrix[0], -matrix[1], -matrix[2], matrix[3], -matrix[4], -matrix[5], -matrix[6], matrix[7],
+                    -matrix[8], -matrix[9], -matrix[10], matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]))
+
+        group.addChild(newController)
+        # freeze the controller transforms under a group with the desired orientation
+        pm.makeIdentity(newController, a=True, t=True, r=True, s=True, pn=1)
+        newController.setParent(world=True)
+        # delete unnecessary objects
+        pm.delete(group)
+        # save new controller
+        mirroredControllers.append(newController)
+
+    return mirroredControllers
 
 """
 import maya.cmds as cmds

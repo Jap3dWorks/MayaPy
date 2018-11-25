@@ -609,24 +609,31 @@ class RigAuto(object):
             zone: leg
         """
         fkColor = 14 if side =='left' else 29
-        legJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).*%s.*joint$' % (self.chName, side), str(point))]
-        logger.debug('%s joints: %s' % (side, legJoints))
+        legJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).(?!twist).*%s.*joint$' % (self.chName, side), str(point))]
+        legTwistJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).(twist).*%s.*joint$' % (self.chName, side), str(point))]
+        logger.debug('%s %s joints: %s' % (side, zone, legJoints))
+        logger.debug('%s %s twist joints: %s' % (side, zone, legTwistJoints))
+
+        # sync legTwistJoints index with leg joints index
+        legTwistSyncJoints = syncListsByKeyword(legJoints, legTwistJoints, 'twist')
 
         # fk controllers are copies of leg joints
         # save controllers name
         legFkControllersList = []
         legIkControllerList = []
         legMainJointList = []
+        legTwistList = []
         legIkJointList = []
 
         NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
 
         # duplicate joints
         for i in legJoints:
-            controllerName = str(i).split('_')[1] if 'end' not in str(i) else 'end'  # if is a end joint, rename end
+            controllerName = str(i).split('_')[1] if 'end' not in str(i) else 'end'  # if is an end joint, rename end
             legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
             legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
             legMainJointList.append(i.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+            
             NameIdList.append(controllerName)
 
         # reconstruct hierarchy
@@ -771,8 +778,8 @@ class RigAuto(object):
                 zone: foot
             """
             fkColor = 14 if side =='left' else 29
-            footJoints = [point for point in pm.ls() if re.match('^%s.*([fF]oot).*%s.*joint$' % (self.chName, side), str(point))]
-            toesJoints = [point for point in pm.ls() if re.match('^%s.*([tT]oe).(?!_tip).*%s.*joint$' % (self.chName, side), str(point))]
+            footJoints = [point for point in pm.ls() if re.match('^%s.*([fF]oot).*((?!twist).).*%s.*joint$' % (self.chName, side), str(point))]
+            toesJoints = [point for point in pm.ls() if re.match('^%s.*([tT]oe).(?!_tip)((?!twist).).*%s.*joint$' % (self.chName, side), str(point))]
             footTotalJoints = footJoints + toesJoints
             logger.debug('foot joints: %s' % footJoints)
             logger.debug('toes joints: %s' % toesJoints)
@@ -822,13 +829,14 @@ class RigAuto(object):
                                      vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
                 pm.xform(footFkCtr, ws=True, m=matrix)  # new transform matrix with vector ajust
 
+                """ not necessary if we read ball position
                 if not footFkControllerList:
                     # create empty grp, useful for ikFk snap
                     fkSyncGrp = pm.group(empty=True, name='%s_fkSync' % str(footFkCtr))
                     pm.xform(fkSyncGrp, ws=True, m=matrix)
                     # parent with main
                     footMain.addChild(fkSyncGrp)
-
+                """
                 # fk control Shape
                 shape = self.create_controller('%sShape' % str(footFkCtr), '%sFk_%s' % (controllerName, side), 1, fkColor)
                 footFkCtr.addChild(shape.getShape(), s=True, r=True)
@@ -937,7 +945,7 @@ class RigAuto(object):
                         footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
                         footIkControllerList.append(footIkCtrWalk)
                 else:
-                    footIkCtrWalk = self.create_controller('%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, ctrType), 'foot%sIk_%s' % (ctrType.capitalize(), side), 1, 17)
+                    footIkCtrWalk = self.create_controller('%s_ik_%s_%s_foot%s_ctr' % (self.chName, zone, side, ctrType.capitalize()), 'foot%sIk_%s' % (ctrType.capitalize(), side), 1, 17)
                     footIkControllerList[-1].addChild(footIkCtrWalk)
                     footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
                     footFootRollCtr.append(footIkCtrWalk)  # save footRoll controllers
@@ -971,15 +979,15 @@ class RigAuto(object):
             legIkControllerList.remove(legIkControl)
 
             # toes general Controller ik Fk review: no side review: ik ctrllers  simplyfy with for
-            toesFkGeneralController = self.create_controller('%s_fk_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
-            pm.xform(toesFkGeneralController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe review
-            toesIkGeneralController = self.create_controller('%s_ik_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
-            pm.xform(toesIkGeneralController, ws=True, m=middleToeCtrMatrix)
+            toeFkGeneralController = self.create_controller('%s_fk_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            pm.xform(toeFkGeneralController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe review
+            toeIkGeneralController = self.create_controller('%s_ik_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            pm.xform(toeIkGeneralController, ws=True, m=middleToeCtrMatrix)
             # parent and store to lists
-            footFkControllerList[-1].addChild(toesFkGeneralController)
-            footToesIkCtr.addChild(toesIkGeneralController)
-            toesFkControllerList.append(toesFkGeneralController)
-            toesIkControllerList.append(toesIkGeneralController)
+            footFkControllerList[-1].addChild(toeFkGeneralController)
+            footToesIkCtr.addChild(toeIkGeneralController)
+            toesFkControllerList.append(toeFkGeneralController)
+            toesIkControllerList.append(toeIkGeneralController)
 
             # fk Roots and autos
             footFkRoots = createRoots(footFkControllerList)
@@ -992,17 +1000,27 @@ class RigAuto(object):
             toesIkRoots = createRoots(toesIkControllerList)
             toesIkAuto = createRoots(toesIkControllerList, 'auto')
 
-            # connect toes rotate attributes
+            # connect toes rotate attributes and set limits
             for ikOrFk in [toesFkAuto, toesIkAuto]:
-                toesGeneralCtrIkOrFk = toesFkGeneralController if ikOrFk == toesFkAuto else toesIkGeneralController
+                toesGeneralCtrIkOrFk = toeFkGeneralController if ikOrFk == toesFkAuto else toeIkGeneralController
+                toesCntrLst = toesFkControllerList if ikOrFk == toesFkAuto else toesIkControllerList
+
                 logger.debug('toesGeneralCtrIkOrFk: %s, %s' % (toesGeneralCtrIkOrFk, type(toesGeneralCtrIkOrFk)))
-                for iAuto in ikOrFk:
-                    if 'toe' in str(iAuto) and 'toesGeneral' not in str(iAuto):
+                for i, iAuto in enumerate(ikOrFk):
+                    if 'toe' in str(iAuto) and 'toeGeneral' not in str(iAuto):
                         for axis in ('X', 'Y', 'Z'):
                             toesGeneralCtrIkOrFk.attr('rotate%s' % axis).connect(iAuto.attr('rotate%s' % axis))
+                            # set limits for toes ctr translate
+                            for minMax in ('min', 'max'):
+                                # limit value
+                                value = -.7 if minMax == 'min' else .7
+                                toesCntrLst[i].attr('%sTrans%sLimitEnable' % (minMax, axis)).set(True)
+                                toesCntrLst[i].attr('%sTrans%sLimit' % (minMax, axis)).set(value)
+
 
             # lock and hide attributes. after root creation
             lockAndHideAttr(footIkControllerList[1:], True, False, True)
+            lockAndHideAttr(toesIkControllerList[-1], True, False, True)
 
             # ik ctr autos
             for i, autoGrp in enumerate(footIkAuto[1:]):
@@ -1106,14 +1124,6 @@ class RigAuto(object):
 
                 #lockAndHideAttr(toesFkControllerList[i], True, False, False)
                 #lockAndHideAttr(toesIkControllerList[i], True, False, False)
-                # review: i don't know if this is correct
-                for axis in ('X', 'Y', 'Z'):
-                    for minMax in ('min', 'max'):
-                        value = -.7 if minMax == 'min' else .7
-                        toesFkControllerList[i].attr('%sTrans%sLimitEnable' % (minMax,axis)).set(True)
-                        toesFkControllerList[i].attr('%sTrans%sLimit' % (minMax, axis)).set(value)
-                        toesIkControllerList[i].attr('%sTrans%sLimitEnable' % (minMax, axis)).set(True)
-                        toesIkControllerList[i].attr('%sTrans%sLimit' % (minMax, axis)).set(value)
 
                 pm.setAttr('%s.radi' % toesFkControllerList[i], channelBox=False, keyable=False)
 
@@ -1477,3 +1487,52 @@ def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
             mfnNurbsCurve.setCV(nearest[1], nearest[0] + mvector, OpenMaya.MSpace.kWorld)
 
     mfnNurbsCurve.updateCurve()
+
+
+def syncListsByKeyword(primaryList, secondaryList, keyword=None):
+    """
+    arrange the secondary list by each element od the primary, if they are equal less the keyword
+    if not keyword, the script will try to find one
+    list1 = ['akona_upperArm_left_joint','akona_foreArm_left_joint','akona_arm_end_left_joint']
+    list2 = ['akona_upperArm_twist1_left_joint','akona_upperArm_twist2_left_joint','akona_foreArm_twist1_left_joint', 'akona_foreArm_twist2_left_joint']
+    keyword: twist
+    retutn : [['akona_upperArm_twist1_left_joint', 'akona_upperArm_twist2_left_joint'], ['akona_foreArm_twist1_left_joint', 'akona_foreArm_twist2_left_joint'], []]
+
+    """
+    filterChars = '1234567890_'
+    if not keyword:
+        count = {}
+        for secondaryItem in secondaryList:
+            for word in str(secondaryItem).split('_'):
+                for fChar in filterChars:
+                    word = word.replace(fChar, '')
+
+                count[word] = count.get(word, 0) + 1
+
+        wordsDetect = [word for word in count if count[word] == len(secondaryList) and word not in str(primaryList[0])]
+
+        if len(wordsDetect) != 1:
+            logger.info('no keyword detect')
+            return
+        keyword = wordsDetect[0]
+
+    arrangedSecondary = []
+
+    for primaryItem in primaryList:
+        actualList = []
+        for secondaryItem in secondaryList:
+            splitStr = str(secondaryItem).partition(keyword)
+            indexCut = None
+            for i, char in enumerate(splitStr[-1]):
+                if char in filterChars:
+                    indexCut = i + 1
+                else:
+                    break
+
+            compareWord = splitStr[0] + splitStr[-1][indexCut:]
+            if compareWord == str(primaryItem):
+                actualList.append(secondaryItem)
+
+        arrangedSecondary.append(actualList)
+
+    return arrangedSecondary
