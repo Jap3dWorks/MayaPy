@@ -31,8 +31,7 @@ def twistBonesCreator(sections):
 
         twistJoints = [sel]
         for i in range(sections):
-            if i == sections-1:
-                break
+
             nameList = str(sel).split('_')
             nameList.insert(2, 'twist%s' %(i+1))
             nameTwist=nameList.pop(0)
@@ -43,6 +42,10 @@ def twistBonesCreator(sections):
             twistJoints[-1].addChild(twistJoint)
             twistJoint.translateX.set(value)
             twistJoints.append(twistJoint)
+
+            if i == sections - 1:
+                # last joint bigger
+                twistJoint.radius.set(3)
 
         twistJoints[-1].addChild(child)
         totalNewJoints += twistJoints[1:]

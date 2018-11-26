@@ -614,6 +614,9 @@ class RigAuto(object):
         logger.debug('%s %s joints: %s' % (side, zone, legJoints))
         logger.debug('%s %s twist joints: %s' % (side, zone, legTwistJoints))
 
+        # group for leg controls
+        legCtrGrp = pm.group(empty=True, name='%s_%s_%s_ctrGrp_root' % (self.chName, zone, side))
+
         # sync legTwistJoints index with leg joints index
         legTwistSyncJoints = syncListsByKeyword(legJoints, legTwistJoints, 'twist')
 
@@ -628,13 +631,44 @@ class RigAuto(object):
         NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
 
         # duplicate joints
-        for i in legJoints:
+        for n, i in enumerate(legJoints):
             controllerName = str(i).split('_')[1] if 'end' not in str(i) else 'end'  # if is an end joint, rename end
             legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
             legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
             legMainJointList.append(i.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
-            
+
+            ### twist Joints ####
+            if legTwistSyncJoints[n]:
+                legTwistIni = [i.duplicate(po=True, name='%s_twist0_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0]]
+
+                for j, twstJnt in enumerate(legTwistSyncJoints[n]):
+                    # duplicate and construc hierarchy
+                    legTwistIni.append(twstJnt.duplicate(po=True, name='%s_twist%s_%s_%s_%s_joint' % (self.chName, j+1, zone, side, controllerName))[0])
+                    legTwistIni[-2].addChild(legTwistIni[-1])
+
+                legTwistList.append(legTwistIni)  # append to list of tJoints
+                self.ctrGrp.addChild(legTwistIni[0])
+
+                # parent twist joints
+                if n == 0:
+                    self.ikControllers['spine'][0].addChild(legTwistIni[0])  # first to ctr ik hips
+                else:
+                    legMainJointList[-2].addChild(legTwistIni[0])  # lower twist child of upper leg
+
+                # create twist group orient tracker, if is chaint before foot or hand, track foot or hand
+                if legTwistSyncJoints[n] == legTwistSyncJoints[-2]:  # just before end joint
+                    footTwstList = list(legTwistIni)
+                    footTwstZone = zone
+                    footTwstCtrName = controllerName
+                    footpointCnstr = legMainJointList[-1]
+
+                else:
+                    # connect and setup leg Twist Ini chain
+                    twistJointsConnect(legTwistIni, legMainJointList[-1], self.chName, zone, side, controllerName)
+
             NameIdList.append(controllerName)
+
+        logger.debug('leg Twist joints: %s' % legTwistList)
 
         # reconstruct hierarchy
         # create Fk control shapes
@@ -769,7 +803,7 @@ class RigAuto(object):
         ikFkshape.ikFk.connect(legIkControl.visibility)
 
         # function for create foots, Review: maybe here another to create hands
-        def foot_auto(side, zone='foot'):
+        def foot_auto(zone='foot'):
             """
             # TODO: organitze and optimize this Func
             auto build a ik fk foot
@@ -857,6 +891,9 @@ class RigAuto(object):
             # parent fk controller under leg
             legFkControllersList[-1].addChild(footFkControllerList[0])
             legMainJointList[-1].addChild(footMainJointsList[0])
+
+            # twistJointsConnections
+            twistJointsConnect(footTwstList, footMainJointsList[0], self.chName, footTwstZone, side, footTwstCtrName, footpointCnstr)
 
             # create toe Fk and ik ctr
             # last foot fkCtr, easiest fot later access
@@ -1134,7 +1171,7 @@ class RigAuto(object):
             return footIkControllerList + toesIkControllerList, footFkControllerList + toesFkControllerList
 
         if footAuto:
-            footIkCtrList, footFkCtrList = foot_auto(side)
+            footIkCtrList, footFkCtrList = foot_auto()
             legIkControllerList = legIkControllerList + footIkCtrList
             legFkControllersList = legFkControllersList + footFkCtrList
         else:
@@ -1487,6 +1524,55 @@ def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
             mfnNurbsCurve.setCV(nearest[1], nearest[0] + mvector, OpenMaya.MSpace.kWorld)
 
     mfnNurbsCurve.updateCurve()
+
+def twistJointsConnect(trackJointChain, trackMain, chName, zone, side, controllerName, pointCnstr=None):
+    """
+    Connect and setup twist joints
+    Args:
+        trackJointChain(list)(pm.Joint): chain of twist joints
+        trackGroup(pm.Transform): group that will track the orientation
+        trackMain(pm.Joint): main joint where trackGroup will be oriented constraint
+        pointCnstr: object where the joint chain will be pointconstrained, if this arg is given, an extra group is created. to track correctly
+        the main joint
+    return:
+    """
+    # if not pointCnstr use main joint
+    if pointCnstr:
+        twistRefGrp = pm.group(empty=True, name='%s_twistOri_%s_%s_%s_grp' % (chName, zone, side, controllerName))
+        pm.xform(twistRefGrp, ws=True, ro=pm.xform(trackJointChain[0], ws=True, q=True, ro=True))
+        pm.xform(twistRefGrp, ws=True, t=pm.xform(trackMain, ws=True, q=True, t=True))
+        trackMain.addChild(twistRefGrp)
+
+    else:
+        pointCnstr = trackMain
+        twistRefGrp = trackMain
+
+
+    trackGroup = pm.group(empty=True, name='%s_twistOri_%s_%s_%s_grp' % (chName, zone, side, controllerName))
+
+    pm.xform(trackGroup, ws=True, m=pm.xform(trackJointChain[0], ws=True, q=True, m=True))
+    trackJointChain[0].addChild(trackGroup)  # parent first joint of the chain
+
+    # constraint to main
+    twstOrientCntr = pm.orientConstraint(twistRefGrp, trackGroup, maintainOffset=False, name='%s_twistOri_%s_%s_%s_orientContraint' % (chName, zone, side, controllerName))
+    twstPointCnstr = pm.pointConstraint(pointCnstr, trackJointChain[0], maintainOffset=False, name='%s_twistPnt_%s_%s_%s_pointConstraint' % (chName, zone, side, controllerName))
+    # CreateIk
+    twstIkHandle, twstIkEffector = pm.ikHandle(startJoint=trackJointChain[0], endEffector=trackJointChain[1], solver='ikRPsolver', name='%s_twist_%s_%s_%s_ikHandle' % (chName, zone, side, controllerName))
+    pointCnstr.addChild(twstIkHandle)
+    # set Polevector to 0 0 0
+    for axis in ('X', 'Y', 'Z'):
+        twstIkHandle.attr('poleVector%s' % axis).set(0)
+
+    # nodes
+    twstMultiplyDivide = pm.createNode('multiplyDivide', name='%s_twist_%s_%s_%s_multiplyDivide' % (chName, zone, side, controllerName))
+    twstMultiplyDivide.input2X.set(len(trackJointChain) - 1)
+    twstMultiplyDivide.operation.set(2)
+    trackGroup.rotateX.connect(twstMultiplyDivide.input1X)
+    # connect node to twist joint
+    for k, twstJoint in enumerate(trackJointChain):
+        if k == 0:  # first joint nothing
+            continue
+        twstMultiplyDivide.outputX.connect(twstJoint.rotateX)
 
 
 def syncListsByKeyword(primaryList, secondaryList, keyword=None):
