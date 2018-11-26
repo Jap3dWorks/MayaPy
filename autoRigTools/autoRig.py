@@ -615,7 +615,8 @@ class RigAuto(object):
         logger.debug('%s %s twist joints: %s' % (side, zone, legTwistJoints))
 
         # group for leg controls
-        legCtrGrp = pm.group(empty=True, name='%s_%s_%s_ctrGrp_root' % (self.chName, zone, side))
+        legCtrGrp = pm.group(empty=True, name='%s_ik_%s_%s_ctrGrp_root' % (self.chName, zone, side))
+        self.ctrGrp.addChild(legCtrGrp)
 
         # sync legTwistJoints index with leg joints index
         legTwistSyncJoints = syncListsByKeyword(legJoints, legTwistJoints, 'twist')
@@ -690,7 +691,7 @@ class RigAuto(object):
         legIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
         # pm.xform(legIkControl, ws=True, m=pm.xform(legJoints[-1], q=True, ws=True, m=True))
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
-        self.ctrGrp.addChild(legIkControl)  # parent to ctr group
+        legCtrGrp.addChild(legIkControl)  # parent to ctr group
 
         # organitze outliner
         self.ikControllers['spine'][0].addChild(legFkControllersList[0])
@@ -702,8 +703,9 @@ class RigAuto(object):
         createRoots(legIkControllerList)
 
         # fkRoots
-        createRoots(legFkControllersList)
+        legFkCtrRoots = createRoots(legFkControllersList)
         createRoots(legFkControllersList, 'auto')
+        legIkCtrRoot = createRoots([legIkJointList[0]])
 
         # set preferred angle
         legIkJointList[1].preferredAngleZ.set(-15)
@@ -714,7 +716,7 @@ class RigAuto(object):
         # create poles
         legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
         relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
-        self.ctrGrp.addChild(legPoleController)
+        legCtrGrp.addChild(legPoleController)
         pm.addAttr(legPoleController, ln='polePosition', at='enum', en="world:root:foot", k=True)
         # save poleVector
         legIkControllerList.append(legPoleController)
@@ -742,7 +744,7 @@ class RigAuto(object):
                 legPoleAnim.addKeyframe(0, 1)
                 legPoleAnim.addKeyframe(1, 0)
                 legPoleAnim.addKeyframe(2, 0)
-                self.ctrGrp.addChild(legPoleGrp)
+                legCtrGrp.addChild(legPoleGrp)
             elif attr == 'root':
                 legPoleAnim.addKeyframe(0, 0)
                 legPoleAnim.addKeyframe(1, 1)
@@ -776,6 +778,15 @@ class RigAuto(object):
         ikFkshape.ikFk.connect(plusMinusIkFk.input1D[1])
         plusMinusIkFk.input1D[0].set(1)
         plusMinusIkFk.operation.set(2)
+
+        ###Strech###
+        # fk strech
+        legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)
+        logger.debug('Leg FK roots distances: %s' % legFkrootsDistances)
+        fKStrchCreator(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape)
+        # ik strech
+        logger.debug('Leg ik strech elements: %s, %s, %s' % (legIkCtrRoot[0], ikHandle, legIkJointList[1:]))
+        ikStrechCreator([legIkCtrRoot[0], ikHandle], legMaxiumDistance, legIkJointList[1:], self.chName, zone, side)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
@@ -962,7 +973,7 @@ class RigAuto(object):
             # ik foot ctr TODO: simplify this section
             # TODO: create the rest of the controllers here too
             footIkCtr = self.create_controller('%s_ik_%s_%s_foot_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
-            self.ctrGrp.addChild(footIkCtr)
+            legCtrGrp.addChild(footIkCtr)
             footIkControllerList.append(footIkCtr)  # append joint to list
             footIkAttrTypes = ['heel', 'tilt', 'toes', 'ball', 'footRoll']
             # add auto attributes
@@ -1005,7 +1016,6 @@ class RigAuto(object):
             for i in legIkControl.listRelatives(c=True, type='transform'):  # traspase childs from previous leg controller
                 footBallIkCtr.addChild(i)
 
-            #footBallIkCtr.addChild(ikHandle)  # add ik handle too
             # parent toes Ik ctr to footToes
             logger.debug('footToesIkCtr: %s, %s' % (footToesIkCtr, type(footToesIkCtr)))
             logger.debug('toeIkCtrParents: %s' % toeIkCtrParents)
@@ -1376,9 +1386,9 @@ class RigAuto(object):
         logger.debug('controller %s' % controller)
         return controller
 
-#######
-#utils#
-#######
+#################
+#utils#and#Funcs#
+#################
 def relocatePole(pole, joints, distance=1):
     """
     relocate pole position for pole vector
@@ -1622,3 +1632,87 @@ def syncListsByKeyword(primaryList, secondaryList, keyword=None):
         arrangedSecondary.append(actualList)
 
     return arrangedSecondary
+
+def calcDistances(pointList):
+    """
+    Calculate de distance between the points in the given list. 0->1, 1->2, 2->3...
+    Args:
+        pointList(List)(pm.Transform):
+    Returns:
+        (list): with distances
+        (float): total distance
+    """
+    distancesList=[]
+    totalDistance=0
+    for i, point in enumerate(pointList):
+        if i == len(pointList)-1:
+            continue
+        point1 = point.getTranslation('world')
+        point2 = pointList[i+1].getTranslation('world')
+
+        vector = point2 - point1
+        vector = OpenMaya.MVector(vector[0],vector[1],vector[2])
+        length = vector.length()
+
+        distancesList.append(vector.length())
+        totalDistance += length
+
+    return distancesList, totalDistance
+
+def fKStrchCreator(fkObjList, fkDistances, nodeAttr):
+    """
+    obj list and distances must be same len
+    create an fk strech ctr
+    Args:
+        fkObjList:
+        fkDistances:
+        nodeAttr:
+    Returns:
+    """
+    # create attr
+    attrName = 'fkStrech'
+    pm.addAttr(nodeAttr,  longName=attrName, shortName=attrName,  minValue=-50, maxValue=50, type='float', defaultValue=0.0, k=True)
+    for n, obj in enumerate(fkObjList):
+        plusNode = pm.createNode('plusMinusAverage', name='%s_strech' % str(obj))
+        nodeAttr.attr(attrName).connect(plusNode.input1D[0])
+        plusNode.input1D[1].set(fkDistances[n])
+        plusNode.output1D.connect(obj.translateX)
+
+def ikStrechCreator(ikObjList, ikDistance, ikJoints, char, zone, side):
+    """
+    create ik strech system, strech by translate
+    Args:
+        ikObjList(list): top object and lower object
+        ikDistance(float): maxium distance between top and lower
+        ikJoints(list): ikJoints that will strech (no the first joint)
+        char, zone, side: info
+    Returns:
+    """
+    # distance between objetcs, and connect matrix
+    distanceBetween = pm.createNode('distanceBetween', name='%s_ikStrech_%s_%s_distanceBetween' % (char, zone, side))
+    for i in range(len(ikObjList)):
+        ikObjList[i].worldMatrix[0].connect(distanceBetween.attr('inMatrix%s' % (i+1)))
+
+    # conditional node
+    conditional = pm.createNode('condition', name='%s_ikStrech_%s_%s_conditional' % (char, zone, side))
+    conditional.operation.set(2)
+    conditional.colorIfFalseR.set(1)
+    # connect distance to conditional
+    distanceBetween.distance.connect(conditional.firstTerm)
+    conditional.secondTerm.set(ikDistance)
+    # scaleFactor
+    multiplydivide = pm.createNode('multiplyDivide', name='%s_ikStrech_%s_%s_conditional' % (char, zone, side))
+    multiplydivide.operation.set(2)  # set to divide
+    distanceBetween.distance.connect(multiplydivide.input1X)
+    multiplydivide.input2X.set(ikDistance)
+    # connecto to conditional
+    multiplydivide.outputX.connect(conditional.colorIfTrueR)
+
+    # multiply scale factor by joints x transform
+    # TODO: create node every 3 connections
+    for joint in ikJoints:
+        multiplyTranslate = pm.createNode('multiplyDivide', name='%s_strech' % str(joint))
+        conditional.outColorR.connect(multiplyTranslate.input1X)
+        multiplyTranslate.input2X.set(joint.translateX.get())
+        # conencto to joint
+        multiplyTranslate.outputX.connect(joint.translateX)
