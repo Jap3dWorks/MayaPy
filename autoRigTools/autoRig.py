@@ -709,7 +709,6 @@ class RigAuto(object):
         # fkRoots
         legFkCtrRoots = createRoots(legFkControllersList)
         createRoots(legFkControllersList, 'auto')
-        legIkCtrRoot = createRoots([legIkJointList[0]]) review
 
         # set preferred angle
         legIkJointList[1].preferredAngleZ.set(-15)
@@ -786,7 +785,7 @@ class RigAuto(object):
         ###Strech###
         # fk strech
         legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
-        ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkCtrRoot, ikHandle],
+        ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
                          legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, self.chName, zone,
                          side)
 
@@ -818,14 +817,16 @@ class RigAuto(object):
                         # todo: connect scales Y Z    Simplify
                         orientConstraintToJoint = pm.orientConstraint(twistJnt, legJoints[i], maintainOffset=False,name='%s_main_%s_%s_%s_parentConstraint' % (self.chName, zone, side, NameIdList[i]))
                         pointConstraintToJoint = pm.pointConstraint(twistJnt, legJoints[i], maintainOffset=False,name='%s_main_%s_%s_%s_pointConstraint' % (self.chName, zone, side, NameIdList[i]))
-                        #twistJnt.scaleY.connect(legJoints[i].scaleY)
-                        #twistJnt.scaleZ.connect(legJoints[i].scaleZ)
+                        #pm.scaleConstraint(twistJnt, legJoints[i], maintainOffset=False)
+                        twistJnt.scaleY.connect(legJoints[i].scaleY)
+                        twistJnt.scaleZ.connect(legJoints[i].scaleZ)
                     else:
                         logger.debug('Leg connecting twist: %s, %s, %s' %(twistJnt, legTwistSyncJoints[i], j))
                         twstOrientConstraint = pm.orientConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False, name='%s_twist%s_%s_%s_%s_orientConstraint' % (self.chName,j ,zone, side, NameIdList[i]))
                         twstPointtConstraint = pm.pointConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False, name='%s_twist%s_%s_%s_%s_pointConstraint' % (self.chName,j ,zone, side, NameIdList[i]))
-                        #twistJnt.scaleY.connect(legTwistSyncJoints[i][j-1].scaleY)
-                        #twistJnt.scaleZ.connect(legTwistSyncJoints[i][j-1].scaleZ)
+                        #pm.scaleConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False)
+                        twistJnt.scaleY.connect(legTwistSyncJoints[i][j-1].scaleY)
+                        twistJnt.scaleZ.connect(legTwistSyncJoints[i][j-1].scaleZ)
 
         # ik blending controller attr
         ikFkshape.ikFk.connect(legPoleController.visibility)
@@ -1582,7 +1583,12 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     # distance between objetcs, and connect matrix
     distanceBetween = pm.createNode('distanceBetween', name='%s_ikStrech_%s_%s_distanceBetween' % (char, zone, side))
     for i in range(len(ikObjList)):
-        ikObjList[i].worldMatrix[0].connect(distanceBetween.attr('inMatrix%s' % (i+1)))
+        # use helpers to avoid cycle checks
+        positionTrackIk = pm.group(empty=True)
+        ikObjList[i].firstParent().addChild(positionTrackIk)
+        pm.xform(positionTrackIk, ws=True, m=pm.xform(ikObjList[i], ws=True, q=True, m=True))
+
+        positionTrackIk.worldMatrix[0].connect(distanceBetween.attr('inMatrix%s' % (i+1)))
 
     # conditional node
     conditionalScaleFactor = pm.createNode('condition', name='%s_ikStrech_%s_%s_conditional' % (char, zone, side))
@@ -1623,9 +1629,9 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     # create animNode to control scale
     conserveVolumeAnimCurve = pm.createNode('animCurveTU', name='%s_%s_%s_conserveVolume_animCurveTU' % (char, zone, side))
     # draw curve
-    conserveVolumeAnimCurve.addKeyframe(0, 0.0)
+    conserveVolumeAnimCurve.addKeyframe(0, 0.3)
     conserveVolumeAnimCurve.addKeyframe((len(conserveVolumeJointList) - 1) // 2, 1.0)
-    conserveVolumeAnimCurve.addKeyframe(len(conserveVolumeJointList) - 2, 0.0)
+    conserveVolumeAnimCurve.addKeyframe(len(conserveVolumeJointList) - 2, 0.3)
     # invert cv  -> (1-cv)
     invConserveVolumeF = pm.createNode('plusMinusAverage')
     invConserveVolumeF.operation.set(2)  # substract
@@ -1655,7 +1661,7 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         divideConVol.outputX.connect(CVJoint.scaleZ)
 
     # review
-    # connect to main joints formula: A+(B-A)*blend for joint, add twistBones, and strech too
+    # connect to main joints formula: A+(B-A)*blend for joint, add twistBones, and stretch too
     for i, fkOut in enumerate(outputFk):
         controllerType = str(mainJoints[i]).split('_')[-2]
         plusMinus = pm.createNode('plusMinusAverage', name='%s_mainStrech_%s_%s_%s_plusMinus' % (char, zone, side, controllerType))
