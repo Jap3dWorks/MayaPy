@@ -136,7 +136,7 @@ class RigAuto(object):
         pm.rebuildCurve(spineCurve, s=2, rpo=True, ch=False, rt=0, d=3, kt=0, kr=0)
 
         # review: test autoMethod
-        adjustCurveToPoints(spineJoints, spineCurve, 16, 0.01)
+        snapCurveToPoints(spineJoints, spineCurve, 16, 0.01)
 
         # create locators and connect to curve CV's
         spineDrvList = []
@@ -357,7 +357,7 @@ class RigAuto(object):
 
         # rebuildCurve
         pm.rebuildCurve(neckHeadCurve, s=2, rpo=True, ch=False, rt=0, d=3, kt=0, kr=0)
-        adjustCurveToPoints(neckHeadJoints[:-1], neckHeadCurve, 16, 0.01)
+        snapCurveToPoints(neckHeadJoints[:-1], neckHeadCurve, 16, 0.01)
 
         # create locators and connect to curve CV's
         neckHeadDrvList = []
@@ -782,9 +782,9 @@ class RigAuto(object):
         ###Strech###
         # fk strech
         legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
-        ikFkStrechCreator(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
-                          legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, self.chName, zone,
-                          side)
+        ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
+                         legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, self.chName, zone,
+                         side)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
@@ -1403,10 +1403,10 @@ def relocatePole(pole, joints, distance=1):
     relocate pole position for pole vector
     at the moment, valid for 3 joints.
     not calculate rotation
-    TODO: calculate rotation. matrix transform
     Args:
-        pole: PyNode of pole
-        joints: list of joints, pm nodes
+        pole(pm.Transform): PyNode of pole
+        joints(list)(pm.Transform): list of joints, pm nodes
+        distance(float): distance from knee
     """
     # first vector
     position1 = joints[0].getTranslation('world')
@@ -1433,10 +1433,18 @@ def relocatePole(pole, joints, distance=1):
     yVector.normalize()
 
     pole.setTransformation([xVector.x, xVector.y, xVector.z, 0, yVector.x, yVector.y, yVector.z, 0, poleVector.x, poleVector.y, poleVector.z, 0,
-                       poleVector.x * distance + position2[0], poleVector.y * distance + position2[1], poleVector.z * distance + position2[2],
-                      1])
+                       poleVector.x * distance + position2[0], poleVector.y * distance + position2[1], poleVector.z * distance + position2[2], 1])
 
-def createRoots(list, sufix='root'):
+def createRoots(list, suffix='root'):
+    """
+    Create root on elements, respecting their present hierarchy.
+    Args:
+        list(list)(pm.Transform)(pm.Joint): list of transforms to create root, on joints set joint orient to 0
+        suffix(str): suffix for the root grp
+
+    Returns:
+
+    """
     roots = []
     for arg in list:
         try:
@@ -1445,7 +1453,7 @@ def createRoots(list, sufix='root'):
             parent = None
         # explanation: pm getTransformation gives transform matrix in object space.
         # so we need to use pm.xform()
-        rootGrp = pm.group(em=True, name='%s_%s' % (arg, sufix))
+        rootGrp = pm.group(em=True, name='%s_%s' % (arg, suffix))
         matrixTransform = pm.xform(arg, q=True, ws=True, m=True)
         pm.xform(rootGrp, ws=True, m=matrixTransform)
 
@@ -1466,15 +1474,13 @@ def createRoots(list, sufix='root'):
 
 def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
     """
-    lock hide and limit attributes
+    lock and hide transform attributes
+    # TODO: add limit operations
     Args:
-        obj:
-        translate:
-        rotate:
-        scale:
-        limitTranslate (list): (min, max). pe (10,10)   (false, 10)
-        limitRotate (list): (min, max)
-        limitScale (list): (min, max)
+        obj(pm.Trasform): Element to lock and hide
+        translate(True): true, lock and hide translate
+        rotate(True): true, lock and hide rotate
+        scale(True): true, lock and hide scale
     """
     if isinstance(obj, list):
         itemList = obj
@@ -1498,7 +1504,15 @@ def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
 
 
 
-def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
+def snapCurveToPoints(points, curve, iterations=4, precision=0.05):
+    """
+    Snap curve to points moving CV's of the nurbsCurve
+    Args:
+        points(list): points where snap curve
+        curve(pm.nurbsCurve): curve to snap
+        iterations(int): number of passes, higher more precise. default 4
+        precision(float): distance between point and curve the script is gonna take as valid. default 0.05
+    """
     selection = OpenMaya.MSelectionList()
     selection.add(str(curve))
     dagpath = OpenMaya.MDagPath()
@@ -1507,7 +1521,7 @@ def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
     mfnNurbsCurve = OpenMaya.MFnNurbsCurve(dagpath)
 
     for i in range(iterations):
-        for joint in joints:
+        for joint in points:
             jointPos = joint.getTranslation('world')
             jointPosArray = OpenMaya.MFloatArray()
             util = OpenMaya.MScriptUtil()
@@ -1544,21 +1558,23 @@ def adjustCurveToPoints(joints, curve, iterations=4, precision=0.05):
 
     mfnNurbsCurve.updateCurve()
 
-def twistJointsConnect(trackJointChain, trackMain, chName, zone, side, controllerName, pointCnstr=None):
+def twistJointsConnect(twistMainJoints, trackMain, chName, zone, side, controllerName, pointCnstr=None):
     """
-    Connect and setup twist joints
+    Connect and setup orient for twist joints
     Args:
-        trackJointChain(list)(pm.Joint): chain of twist joints
-        trackGroup(pm.Transform): group that will track the orientation
+        twistMainJoints(list)(pm.Joint): chain of twist joints
         trackMain(pm.Joint): main joint where trackGroup will be oriented constraint
-        pointCnstr: object where the joint chain will be pointconstrained, if this arg is given, an extra group is created. to track correctly
+        pointCnstr: object where the twistMainJoints[0] will be pointconstrained, if this arg is given, an extra group is created. to track correctly
         the main joint
+        chName: name of the character
+        zone: leg, arm
+        side: left right
     return:
     """
     # if not pointCnstr use main joint
     if pointCnstr:
         twistRefGrp = pm.group(empty=True, name='%s_twistOri_%s_%s_%s_grp' % (chName, zone, side, controllerName))
-        pm.xform(twistRefGrp, ws=True, ro=pm.xform(trackJointChain[0], ws=True, q=True, ro=True))
+        pm.xform(twistRefGrp, ws=True, ro=pm.xform(twistMainJoints[0], ws=True, q=True, ro=True))
         pm.xform(twistRefGrp, ws=True, t=pm.xform(trackMain, ws=True, q=True, t=True))
         trackMain.addChild(twistRefGrp)
 
@@ -1566,29 +1582,30 @@ def twistJointsConnect(trackJointChain, trackMain, chName, zone, side, controlle
         pointCnstr = trackMain
         twistRefGrp = trackMain
 
-
+    # group that will be used for store orientation, with a orientConstraint
     trackGroup = pm.group(empty=True, name='%s_twistOri_%s_%s_%s_grp' % (chName, zone, side, controllerName))
 
-    pm.xform(trackGroup, ws=True, m=pm.xform(trackJointChain[0], ws=True, q=True, m=True))
-    trackJointChain[0].addChild(trackGroup)  # parent first joint of the chain
+    pm.xform(trackGroup, ws=True, m=pm.xform(twistMainJoints[0], ws=True, q=True, m=True))
+    twistMainJoints[0].addChild(trackGroup)  # parent first joint of the chain
 
     # constraint to main
     twstOrientCntr = pm.orientConstraint(twistRefGrp, trackGroup, maintainOffset=False, name='%s_twistOri_%s_%s_%s_orientContraint' % (chName, zone, side, controllerName))
-    twstPointCnstr = pm.pointConstraint(pointCnstr, trackJointChain[0], maintainOffset=False, name='%s_twistPnt_%s_%s_%s_pointConstraint' % (chName, zone, side, controllerName))
+    # necessary for strech, if not, twist joint does not follow main joints
+    twstPointCnstr = pm.pointConstraint(pointCnstr, twistMainJoints[0], maintainOffset=False, name='%s_twistPnt_%s_%s_%s_pointConstraint' % (chName, zone, side, controllerName))
     # CreateIk
-    twstIkHandle, twstIkEffector = pm.ikHandle(startJoint=trackJointChain[0], endEffector=trackJointChain[1], solver='ikRPsolver', name='%s_twist_%s_%s_%s_ikHandle' % (chName, zone, side, controllerName))
+    twstIkHandle, twstIkEffector = pm.ikHandle(startJoint=twistMainJoints[0], endEffector=twistMainJoints[1], solver='ikRPsolver', name='%s_twist_%s_%s_%s_ikHandle' % (chName, zone, side, controllerName))
     pointCnstr.addChild(twstIkHandle)
     # set Polevector to 0 0 0
     for axis in ('X', 'Y', 'Z'):
         twstIkHandle.attr('poleVector%s' % axis).set(0)
 
-    # nodes
+    # nodes and connect to twist nodes rotations
     twstMultiplyDivide = pm.createNode('multiplyDivide', name='%s_twist_%s_%s_%s_multiplyDivide' % (chName, zone, side, controllerName))
-    twstMultiplyDivide.input2X.set(len(trackJointChain) - 1)
+    twstMultiplyDivide.input2X.set(len(twistMainJoints) - 1)
     twstMultiplyDivide.operation.set(2)
     trackGroup.rotateX.connect(twstMultiplyDivide.input1X)
     # connect node to twist joint
-    for k, twstJoint in enumerate(trackJointChain):
+    for k, twstJoint in enumerate(twistMainJoints):
         if k == 0:  # first joint nothing
             continue
         twstMultiplyDivide.outputX.connect(twstJoint.rotateX)
@@ -1596,8 +1613,8 @@ def twistJointsConnect(trackJointChain, trackMain, chName, zone, side, controlle
 
 def syncListsByKeyword(primaryList, secondaryList, keyword=None):
     """
-    arrange the secondary list by each element od the primary, if they are equal less the keyword
-    if not keyword, the script will try to find one
+    arrange the secondary list by each element on the primary, if they are equal less the keyword
+    if not keyword, the script will try to find one, p.e:
     list1 = ['akona_upperArm_left_joint','akona_foreArm_left_joint','akona_arm_end_left_joint']
     list2 = ['akona_upperArm_twist1_left_joint','akona_upperArm_twist2_left_joint','akona_foreArm_twist1_left_joint', 'akona_foreArm_twist2_left_joint']
     keyword: twist
@@ -1605,15 +1622,18 @@ def syncListsByKeyword(primaryList, secondaryList, keyword=None):
 
     """
     filterChars = '1234567890_'
+    # if not keyword try to find one
     if not keyword:
         count = {}
+        # count how many copies of each word we have, using a dictionary
         for secondaryItem in secondaryList:
             for word in str(secondaryItem).split('_'):
                 for fChar in filterChars:
                     word = word.replace(fChar, '')
-
+                # if word is yet in dictionary, plus one, if not, create key with word and set it to one
+                # explanation: dict.get(word, 0) return the value of word, if not, return 0
                 count[word] = count.get(word, 0) + 1
-
+        # key word must not be in primary list
         wordsDetect = [word for word in count if count[word] == len(secondaryList) and word not in str(primaryList[0])]
 
         if len(wordsDetect) != 1:
@@ -1622,7 +1642,7 @@ def syncListsByKeyword(primaryList, secondaryList, keyword=None):
         keyword = wordsDetect[0]
 
     arrangedSecondary = []
-
+    # arrange by keyword
     for primaryItem in primaryList:
         actualList = []
         for secondaryItem in secondaryList:
@@ -1642,17 +1662,18 @@ def syncListsByKeyword(primaryList, secondaryList, keyword=None):
 
     return arrangedSecondary
 
-def calcDistances(pointList,vector=None):
+def calcDistances(pointList,vector=False):
     """
     Calculate de distance between the points in the given list. 0->1, 1->2, 2->3...
     Args:
         pointList(List)(pm.Transform):
+        vector(bool): true: use vectors to calculate distances. False: read x value of each element. if points are joints, better use False
     Returns:
         (list): with distances
         (float): total distance
     """
-    distancesList=[]
-    totalDistance=0
+    distancesList = []
+    totalDistance = 0
     if vector:
         for i, point in enumerate(pointList):
             if i == len(pointList)-1:
@@ -1662,29 +1683,35 @@ def calcDistances(pointList,vector=None):
 
             vector = point2 - point1
             vector = OpenMaya.MVector(vector[0],vector[1],vector[2])
+            # length of each vector
             length = vector.length()
 
             distancesList.append(vector.length())
             totalDistance += length
 
-    else: # simply read X values
+    else:  # simply read X values
         for point in pointList[1:]:
             xtranslateValue = point.translateX.get()
-            totalDistance+=xtranslateValue
+            totalDistance += xtranslateValue
             distancesList.append(xtranslateValue)
 
     return distancesList, totalDistance
 
-def ikFkStrechCreator(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, char, zone, side):
+def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, char, zone, side):
     """
-    create ik and fk strech system, strech by translate
-    all the lists must be of the same len
+    create ik and fk stretch system with twistJoints, stretching by translate
+    all the lists must be of the same len()
     Args:
-        fkObjList : roots fk controllers
-        ikObjList(list): top object and lower object
-        ikDistance(float): maxium distance between top and lower
-        ikJoints(list): ikJoints that will strech (no the first joint)
+        fkObjList : roots fk controllers that will stretch (no the first root) 2
+        fkDistances(list(float)): list of distances between chain elements 2
+        nodeAttr(pm.dagNode): shape with ikFk attribute, where fk stretch attribute will be added
+        ikObjList(list): top object and lower object in a ik system 2
+        ikDistance(float): maximum distance between top and lower element in a ik and fk system
+        ikJoints(list): ikJoints that will stretch (no the first joint) 2
         char, zone, side: info
+        mainJoints(list(pm.Joint)): MainJoints to connect the stretch (no the first joint) 2
+        twsitMainJoints(list(list(pm.joints))) : lists with twist joints
+        char, zone, side(str): name of character. zone os the system. side of the system
     Returns:
     TODO: less nodes, new node when all connections are used
     """
@@ -1761,13 +1788,13 @@ def ikFkStrechCreator(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, i
         # to main joint
         plusMinusToMain.output1D.connect(mainJoints[i].translateX)
 
-
-        # twist joints main translate review
-        multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStrech_%s_%s_%s_multiplyDivide' % (char, zone, side, controllerType))
-        multiplyDivideTwstJnt.operation.set(2)  # divide
-        xTranslateSample = twsitMainJoints[i][1].translateX.get()  # second joint should has a translate sample * xTranslateSample / abs(xTranslateSample)
-        multiplyDivideTwstJnt.input2X.set(len(twsitMainJoints[i])-1)  # try change sign here review
-        plusMinusToMain.output1D.connect(multiplyDivideTwstJnt.input1X)
-        # connect to joints
-        for twstJnt in twsitMainJoints[i][1:]:
-            multiplyDivideTwstJnt.outputX.connect(twstJnt.translateX)
+        if twsitMainJoints:
+            # twist joints main translate review
+            multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStrech_%s_%s_%s_multiplyDivide' % (char, zone, side, controllerType))
+            multiplyDivideTwstJnt.operation.set(2)  # divide
+            multiplyDivideTwstJnt.input2X.set(len(twsitMainJoints[i])-1)  # try change sign here review
+            plusMinusToMain.output1D.connect(multiplyDivideTwstJnt.input1X)
+            # connect to joints
+            for twstJnt in twsitMainJoints[i][1:]:
+                # first joint of the twistMainJoint does not has to move
+                multiplyDivideTwstJnt.outputX.connect(twstJnt.translateX)
