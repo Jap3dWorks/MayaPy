@@ -705,7 +705,7 @@ class RigAuto(object):
         # fkRoots
         legFkCtrRoots = createRoots(legFkControllersList)
         createRoots(legFkControllersList, 'auto')
-        legIkCtrRoot = createRoots([legIkJointList[0]])
+        #legIkCtrRoot = createRoots([legIkJointList[0]]) review
 
         # set preferred angle
         legIkJointList[1].preferredAngleZ.set(-15)
@@ -780,19 +780,16 @@ class RigAuto(object):
         plusMinusIkFk.operation.set(2)
 
         ###Strech###
-        # fk strech
-        legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)
-        logger.debug('Leg FK roots distances: %s' % legFkrootsDistances)
-        fKStrchCreator(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape)
-        # ik strech
-        logger.debug('Leg ik strech elements: %s, %s, %s' % (legIkCtrRoot[0], ikHandle, legIkJointList[1:]))
-        ikStrechCreator([legIkCtrRoot[0], ikHandle], legMaxiumDistance, legIkJointList[1:], self.chName, zone, side)
+        # fk strech ik strech
+        legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
+        ikFkStrechCreator(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
+                          legMaxiumDistance, legIkJointList[1:], legMainJointList[1:],legTwistList ,self.chName, zone, side)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
         for i, joint in enumerate(legMainJointList):
             # attributes
-            orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+            orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_%s_orientConstraint' % (self.chName, zone, side, NameIdList[i]))
             ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
             ikFkshape.ikFk.connect(legIkJointList[i].visibility)
 
@@ -807,8 +804,21 @@ class RigAuto(object):
             pm.setAttr('%s.radi' % legFkControllersList[i], channelBox=False, keyable=False)
 
             # connect to deform skeleton
-            parentConstraint = pm.orientConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+            # orientConstraintToJoint = pm.orientConstraint(joint, legJoints[i], maintainOffset=True, name='%s_main_%s_%s_%s_orientConstraint' % (self.chName, zone, side,NameIdList[i]))
+            pointConstraintToJoint = pm.pointConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_%s_pointConstraint' % (self.chName, zone, side,NameIdList[i]))
+            # twistJoints
 
+            """
+            if len(legTwistList) > i:
+                for j, twistJnt in enumerate(legTwistList[i]):  # exclude first term review
+                    if j == 0:
+                        orientConstraintToJoint = pm.orientConstraint(twistJnt, legJoints[i], maintainOffset=False,name='%s_main_%s_%s_%s_parentConstraint' % (self.chName, zone, side, NameIdList[i]))
+                        pointConstraintToJoint = pm.pointConstraint(twistJnt, legJoints[i], maintainOffset=False,name='%s_main_%s_%s_%s_pointConstraint' % (self.chName, zone, side, NameIdList[i]))
+                    else:
+                        logger.debug('Leg connecting twist: %s, %s, %s' %(twistJnt, legTwistSyncJoints[i], j))
+                        twstOrientConstraint = pm.orientConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False, name='%s_twist%s_%s_%s_%s_orientConstraint' % (self.chName,j ,zone, side, NameIdList[i]))
+                        twstPointtConstraint = pm.pointConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False, name='%s_twist%s_%s_%s_%s_pointConstraint' % (self.chName,j ,zone, side, NameIdList[i]))
+            """
         # ik blending controller attr
         ikFkshape.ikFk.connect(legPoleController.visibility)
         ikFkshape.ikFk.connect(legIkControl.visibility)
@@ -1563,9 +1573,9 @@ def twistJointsConnect(trackJointChain, trackMain, chName, zone, side, controlle
     pm.xform(trackGroup, ws=True, m=pm.xform(trackJointChain[0], ws=True, q=True, m=True))
     trackJointChain[0].addChild(trackGroup)  # parent first joint of the chain
 
-    # constraint to main
-    twstOrientCntr = pm.orientConstraint(twistRefGrp, trackGroup, maintainOffset=False, name='%s_twistOri_%s_%s_%s_orientContraint' % (chName, zone, side, controllerName))
-    twstPointCnstr = pm.pointConstraint(pointCnstr, trackJointChain[0], maintainOffset=False, name='%s_twistPnt_%s_%s_%s_pointConstraint' % (chName, zone, side, controllerName))
+    # constraint to main review
+    twstOrientCntr = pm.orientConstraint(twistRefGrp, trackGroup, maintainOffset=True, name='%s_twistOri_%s_%s_%s_orientContraint' % (chName, zone, side, controllerName))
+    #twstPointCnstr = pm.pointConstraint(pointCnstr, trackJointChain[0], maintainOffset=False, name='%s_twistPnt_%s_%s_%s_pointConstraint' % (chName, zone, side, controllerName))
     # CreateIk
     twstIkHandle, twstIkEffector = pm.ikHandle(startJoint=trackJointChain[0], endEffector=trackJointChain[1], solver='ikRPsolver', name='%s_twist_%s_%s_%s_ikHandle' % (chName, zone, side, controllerName))
     pointCnstr.addChild(twstIkHandle)
@@ -1633,7 +1643,7 @@ def syncListsByKeyword(primaryList, secondaryList, keyword=None):
 
     return arrangedSecondary
 
-def calcDistances(pointList):
+def calcDistances(pointList, vector=False):
     """
     Calculate de distance between the points in the given list. 0->1, 1->2, 2->3...
     Args:
@@ -1644,50 +1654,54 @@ def calcDistances(pointList):
     """
     distancesList=[]
     totalDistance=0
-    for i, point in enumerate(pointList):
-        if i == len(pointList)-1:
-            continue
-        point1 = point.getTranslation('world')
-        point2 = pointList[i+1].getTranslation('world')
+    if vector:
+        for i, point in enumerate(pointList):
+            if i == len(pointList)-1:
+                continue
+            point1 = point.getTranslation('world')
+            point2 = pointList[i+1].getTranslation('world')
 
-        vector = point2 - point1
-        vector = OpenMaya.MVector(vector[0],vector[1],vector[2])
-        length = vector.length()
+            vector = point2 - point1
+            vector = OpenMaya.MVector(vector[0],vector[1],vector[2])
+            length = vector.length()
 
-        distancesList.append(vector.length())
-        totalDistance += length
+            distancesList.append(vector.length())
+            totalDistance += length
+
+    else: # simply read X values
+        for point in pointList[1:]:
+            xtranslateValue = point.translateX.get()
+            totalDistance+=xtranslateValue
+            distancesList.append(xtranslateValue)
 
     return distancesList, totalDistance
 
-def fKStrchCreator(fkObjList, fkDistances, nodeAttr):
+def ikFkStrechCreator(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, char, zone, side):
     """
-    obj list and distances must be same len
-    create an fk strech ctr
-    Args:
-        fkObjList:
-        fkDistances:
-        nodeAttr:
-    Returns:
-    """
-    # create attr
-    attrName = 'fkStrech'
-    pm.addAttr(nodeAttr,  longName=attrName, shortName=attrName,  minValue=-50, maxValue=50, type='float', defaultValue=0.0, k=True)
-    for n, obj in enumerate(fkObjList):
-        plusNode = pm.createNode('plusMinusAverage', name='%s_strech' % str(obj))
-        nodeAttr.attr(attrName).connect(plusNode.input1D[0])
-        plusNode.input1D[1].set(fkDistances[n])
-        plusNode.output1D.connect(obj.translateX)
-
-def ikStrechCreator(ikObjList, ikDistance, ikJoints, char, zone, side):
-    """
-    create ik strech system, strech by translate
+    create ik and fk strech system, strech by translate
+    all the lists must be of the same len
     Args:
         ikObjList(list): top object and lower object
         ikDistance(float): maxium distance between top and lower
         ikJoints(list): ikJoints that will strech (no the first joint)
         char, zone, side: info
     Returns:
+    TODO: less nodes, new node when all connections are used
     """
+    # fk system
+    # create attr
+    attrName = 'fkStrech'
+    pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=-50, maxValue=50, type='float',
+               defaultValue=0.0, k=True)
+    outputFk=[]
+    for n, obj in enumerate(fkObjList):
+        plusNode = pm.createNode('plusMinusAverage', name='%s_strech' % str(obj))
+        nodeAttr.attr(attrName).connect(plusNode.input1D[0])
+        plusNode.input1D[1].set(fkDistances[n])
+        plusNode.output1D.connect(obj.translateX)
+        outputFk.append(plusNode)
+
+    # ik system
     # distance between objetcs, and connect matrix
     distanceBetween = pm.createNode('distanceBetween', name='%s_ikStrech_%s_%s_distanceBetween' % (char, zone, side))
     for i in range(len(ikObjList)):
@@ -1710,9 +1724,46 @@ def ikStrechCreator(ikObjList, ikDistance, ikJoints, char, zone, side):
 
     # multiply scale factor by joints x transform
     # TODO: create node every 3 connections
+    outputIk = []
     for joint in ikJoints:
         multiplyTranslate = pm.createNode('multiplyDivide', name='%s_strech' % str(joint))
         conditional.outColorR.connect(multiplyTranslate.input1X)
         multiplyTranslate.input2X.set(joint.translateX.get())
         # conencto to joint
         multiplyTranslate.outputX.connect(joint.translateX)
+        outputIk.append(multiplyTranslate)
+
+    """   # review
+    # connect to main joints formula: A+(B-A).blend for joint, add twistBones, and strech too
+    for i, fkOut in enumerate(outputFk):
+        controllerType = str(mainJoints[i]).split('_')[-2]
+        plusMinus = pm.createNode('plusMinusAverage', name='%s_mainStrech_%s_%s_%s_plusMinus' % (char, zone, side, controllerType))
+        plusMinus.operation.set(2)  # set to substract
+        outputIk[i].outputX.connect(plusMinus.input1D[0])
+        fkOut.output1D.connect(plusMinus.input1D[1])
+
+        # multiply by ikfk blend the output
+        multiplydivideBlend = pm.createNode('multiplyDivide', name='%s_mainStrech_%s_%s_%s_multiplyDivide' % (char, zone, side, controllerType))
+        plusMinus.output1D.connect(multiplydivideBlend.input1X)
+        nodeAttr.attr('ikFk').connect(multiplydivideBlend.input2X)
+
+        # plus outputIk (A)
+        plusMinusToMain=pm.createNode('plusMinusAverage', name='%s_mainStrech_%s_%s_%s_plusMinusToMain' % (char, zone, side, controllerType))
+        multiplydivideBlend.outputX.connect(plusMinusToMain.input1D[0])
+        fkOut.output1D.connect(plusMinusToMain.input1D[1])
+        # to main joint
+        plusMinusToMain.output1D.connect(mainJoints[i].translateX)
+
+        # twist joints main translate
+        multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStrech_%s_%s_%s_multiplyDivide' % (char, zone, side, controllerType))
+        multiplyDivideTwstJnt.operation.set(2)  # divide
+        xTranslateSample = twsitMainJoints[i][1].translateX.get()  # second joint should has a translate sample * xTranslateSample / abs(xTranslateSample)
+        multiplyDivideTwstJnt.input2X.set((len(twsitMainJoints[i])-1)* xTranslateSample / abs(xTranslateSample))  # try change sign here review
+        plusMinusToMain.output1D.connect(multiplyDivideTwstJnt.input1X)
+        # connect to joints
+        for twstJnt in twsitMainJoints[i][1:]:
+            multiplyDivideTwstJnt.outputX.connect(twstJnt.translateX)
+    """
+
+
+

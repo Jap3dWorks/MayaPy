@@ -22,6 +22,7 @@ def spine_head_leg_akona(name='akona'):
     cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_left_joint', maintainOffset=True)
     cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_right_joint', maintainOffset=True)
 
+    return
     # test twistJoints
     selection = [i for i in cmds.ls() if re.match('^%s_twist._.*_.*_.*_joint$' % name, i)]
     for sel in selection:
