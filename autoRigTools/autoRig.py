@@ -1564,7 +1564,8 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     # fk system
     # create attr
     attrName = 'fkStrech'
-    pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=-50, maxValue=50, type='float', defaultValue=0.0, k=True)
+    maxValue= 50
+    pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=-maxValue, maxValue=maxValue, type='float', defaultValue=0.0, k=True)
     outputFk = []
     for n, obj in enumerate(fkObjList):
         plusNode = pm.createNode('plusMinusAverage', name='%s_strech' % str(obj))
@@ -1578,6 +1579,7 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         plusNode.input1D[1].set(fkDistances[n])
         plusNode.output1D.connect(obj.translateX)
         outputFk.append(plusNode)
+
 
     # ik system
     # distance between objetcs, and connect matrix
@@ -1621,11 +1623,34 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         # create a list with all twist joints of the system
         conserveVolumeJointList += twsitMainJoints[i]
 
+    # fk Stretch, calculate scale factor
+    # plus value and maxium value
+    fkCVplusAverage = pm.createNode('plusMinusAverage')
+    nodeAttr.attr(attrName).connect(fkCVplusAverage.input1D[0])
+    fkCVplusAverage.input1D[1].set(maxValue)
+    # fkCVplusAverage / maxiumValu per 2
+    fkCVMultiply = pm.createNode('multiplyDivide')
+    fkCVMultiply.operation.set(2)  # divide
+    fkCVplusAverage.output1D.connect(fkCVMultiply.input1X)
+    fkCVMultiply.input2X.set(2 * maxValue)
+    # substract to max posible stretch
+    fkCVScaleFactor = pm.createNode('plusMinusAverage')
+    fkCVScaleFactor.operation.set(2)  # substract
+    fkCVScaleFactor.input1D[0].set(1)
+    fkCVMultiply.outputX.connect(fkCVScaleFactor.input1D[1])
+    fkCVScaleFactor.input1D[2].set(-0.5)  # final fk Stretch output
+    # invert
+    fkCVScaleFactorInvert = pm.createNode('plusMinusAverage')
+    fkCVScaleFactorInvert.operation.set(2)  # substract
+    fkCVScaleFactorInvert.input1D[0].set(1)
+    fkCVScaleFactor.output1D.connect(fkCVScaleFactorInvert.input1D[1])
+
+    # ik stretch
     # conserveVolume using conditionalScaleFactor ->  1/conditionalScaleFactor   get inverse
-    conserveVolumeScaleFactor = pm.createNode('multiplyDivide', name='%s_%s_%s_conserveVolume_multiplyDivide' % (char, zone, side))
-    conserveVolumeScaleFactor.operation.set(2)  # set to divide
-    conserveVolumeScaleFactor.input1X.set(1)
-    conditionalScaleFactor.outColorR.connect(conserveVolumeScaleFactor.input2X)
+    ikConserveVolumeScaleFactor = pm.createNode('multiplyDivide', name='%s_%s_%s_conserveVolume_multiplyDivide' % (char, zone, side))
+    ikConserveVolumeScaleFactor.operation.set(2)  # set to divide
+    ikConserveVolumeScaleFactor.input1X.set(1)
+    conditionalScaleFactor.outColorR.connect(ikConserveVolumeScaleFactor.input2X)
     # create animNode to control scale
     conserveVolumeAnimCurve = pm.createNode('animCurveTU', name='%s_%s_%s_conserveVolume_animCurveTU' % (char, zone, side))
     # draw curve
@@ -1633,59 +1658,28 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     conserveVolumeAnimCurve.addKeyframe((len(conserveVolumeJointList) - 1) // 2, 1.0)
     conserveVolumeAnimCurve.addKeyframe(len(conserveVolumeJointList) - 2, 0.3)
     # invert cv  -> (1-cv)
-    invConserveVolumeF = pm.createNode('plusMinusAverage')
-    invConserveVolumeF.operation.set(2)  # substract
-    invConserveVolumeF.input1D[0].set(1)
-    conserveVolumeScaleFactor.outputX.connect(invConserveVolumeF.input1D[1])
+    iKInvConserveVolumeF = pm.createNode('plusMinusAverage')
+    iKInvConserveVolumeF.operation.set(2)  # substract
+    iKInvConserveVolumeF.input1D[0].set(1)
+    ikConserveVolumeScaleFactor.outputX.connect(iKInvConserveVolumeF.input1D[1])
+
     for i, CVJoint in enumerate(conserveVolumeJointList):
-        # frame cache
-        CVFrameCache = pm.createNode('frameCache')
-        conserveVolumeAnimCurve.output.connect(CVFrameCache.stream)
-        CVFrameCache.varyTime.set(i)
-        # multiply frame cache
-        multiplyFrameCache = pm.createNode('multiplyDivide')
-        CVFrameCache.varying.connect(multiplyFrameCache.input1X)
-        invConserveVolumeF.output1D.connect(multiplyFrameCache.input2X)
-        # plus conserveVolume
-        plusConVolum = pm.createNode('plusMinusAverage')
-        multiplyFrameCache.outputX.connect(plusConVolum.input1D[0])
-        conserveVolumeScaleFactor.outputX.connect(plusConVolum.input1D[1])
-        # divide volumeScalefactor / plusConVolum
-        divideConVol = pm.createNode('multiplyDivide')
-        divideConVol.operation.set(2)  # division
-        conserveVolumeScaleFactor.outputX.connect(divideConVol.input1X)
-        plusConVolum.output1D.connect(divideConVol.input2X)
-
+        # ik
+        ikCVNode = connectConserveVolumeToAnimNode(conserveVolumeAnimCurve, i, iKInvConserveVolumeF, ikConserveVolumeScaleFactor)
+        # fk
+        fkCVNode = connectConserveVolumeToAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkCVScaleFactor)
+        # main blending
         # connect to joint
-        divideConVol.outputX.connect(CVJoint.scaleY)
-        divideConVol.outputX.connect(CVJoint.scaleZ)
+        mainBlending(ikCVNode, fkCVNode, CVJoint, nodeAttr, 'ikFk', 'scaleY', 'scaleZ')
 
-    # review
     # connect to main joints formula: A+(B-A)*blend for joint, add twistBones, and stretch too
+    # TODO: sustitute by mainBlending func
     for i, fkOut in enumerate(outputFk):
-        controllerType = str(mainJoints[i]).split('_')[-2]
-        plusMinus = pm.createNode('plusMinusAverage', name='%s_mainStrech_%s_%s_%s_plusMinus' % (char, zone, side, controllerType))
-        plusMinus.operation.set(2)  # set to substract
-        outputIk[i].outputX.connect(plusMinus.input1D[0])
-        fkOut.output1D.connect(plusMinus.input1D[1])
-
-        # multiply by ikfk blend the output
-        multiplydivideBlend = pm.createNode('multiplyDivide', name='%s_mainStrech_%s_%s_%s_multiplyDivide' % (char, zone, side, controllerType))
-        multiplydivideBlend.operation.set(1)
-        plusMinus.output1D.connect(multiplydivideBlend.input1X)
-        nodeAttr.attr('ikFk').connect(multiplydivideBlend.input2X)
-
-        # plus outputIk (A)
-        plusMinusToMain=pm.createNode('plusMinusAverage', name='%s_mainStrech_%s_%s_%s_plusMinusToMain' % (char, zone, side, controllerType))
-        multiplydivideBlend.operation.set(1)
-        multiplydivideBlend.outputX.connect(plusMinusToMain.input1D[0])
-        fkOut.output1D.connect(plusMinusToMain.input1D[1])
-        # to main joint
-        plusMinusToMain.output1D.connect(mainJoints[i].translateX)
+        plusMinusToMain = mainBlending(outputIk[i], fkOut, mainJoints[i], nodeAttr, 'ikFk', 'translateX')
 
         if twsitMainJoints:
-            # twist joints main translate review
-            multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStrech_%s_%s_%s_multiplyDivide' % (char, zone, side, controllerType))
+            # twist joints main translate review names
+            multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStrech_%s_%s_multiplyDivide' % (char, zone, side))
             multiplyDivideTwstJnt.operation.set(2)  # divide
             multiplyDivideTwstJnt.input2X.set(len(twsitMainJoints[i])-1)  # try change sign here review
             plusMinusToMain.output1D.connect(multiplyDivideTwstJnt.input1X)
@@ -1693,3 +1687,72 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
             for twstJnt in twsitMainJoints[i][1:]:
                 # first joint of the twistMainJoint does not has to move
                 multiplyDivideTwstJnt.outputX.connect(twstJnt.translateX)
+
+
+def connectConserveVolumeToAnimNode(animCurve, varyTime, invFactor, Factor):
+    """
+    create circuity nodes to attach a curveAnim to control outputs values
+    Args:
+        animCurve(animNode): anim curve
+        varyTime(index): frame
+        invFactor(node): node with 1-Factor
+        Factor(node): scale Factor maxium
+
+    Returns: multiplyDivide node with final factor
+
+    """
+
+    outputType = 'outputX' if isinstance(Factor, pm.nodetypes.MultiplyDivide) else 'output1D'
+
+    # frame cache
+    CVFrameCache = pm.createNode('frameCache')
+    animCurve.output.connect(CVFrameCache.stream)
+    CVFrameCache.varyTime.set(varyTime)  # i
+    # multiply frame cache
+    multiplyFrameCache = pm.createNode('multiplyDivide')
+    CVFrameCache.varying.connect(multiplyFrameCache.input1X)
+    invFactor.output1D.connect(multiplyFrameCache.input2X)
+    # plus conserveVolume
+    plusConVolum = pm.createNode('plusMinusAverage')
+    multiplyFrameCache.outputX.connect(plusConVolum.input1D[0])
+    Factor.attr(outputType).connect(plusConVolum.input1D[1])
+    # divide volumeScalefactor / plusConVolum
+    divideConVol = pm.createNode('multiplyDivide')
+    divideConVol.operation.set(2)  # division
+    Factor.attr(outputType).connect(divideConVol.input1X)
+    plusConVolum.output1D.connect(divideConVol.input2X)
+
+    return divideConVol
+
+def mainBlending(ikNode, fkNode, mainNode, attrNode,attribute,*args):
+    """
+    create circuitry nodes to blend ik value to fk value
+    Args:
+        ikNode:
+        fkNode:
+        mainNode:
+        args: attributes to connect
+    Return:
+        last node with the blend info
+    """
+    ikOutputType = 'outputX' if isinstance(ikNode, pm.nodetypes.MultiplyDivide) else 'output1D'
+    fKoutputType = 'outputX' if isinstance(fkNode, pm.nodetypes.MultiplyDivide) else 'output1D'
+
+    plusMinusBase=pm.createNode('plusMinusAverage')
+    plusMinusBase.operation.set(2)  # substract
+    ikNode.attr(ikOutputType).connect(plusMinusBase.input1D[0])
+    fkNode.attr(fKoutputType).connect(plusMinusBase.input1D[1])
+    # multiply
+    multiplyNode = pm.createNode('multiplyDivide')
+    attrNode.attr(attribute).connect(multiplyNode.input1X)
+    plusMinusBase.output1D.connect(multiplyNode.input2X)
+    # plus Fk
+    plusIkFkBlend = pm.createNode('plusMinusAverage')
+    multiplyNode.outputX.connect(plusIkFkBlend.input1D[0])
+    fkNode.attr(fKoutputType).connect(plusIkFkBlend.input1D[1])
+
+    # connect to main attributes
+    for arg in args:
+        plusIkFkBlend.output1D.connect(mainNode.attr(arg))
+
+    return plusIkFkBlend
