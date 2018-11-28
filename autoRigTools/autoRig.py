@@ -2,8 +2,11 @@ import pymel.core as pm
 import re
 from maya import OpenMaya
 from autoRigTools import ctrSaveLoadToJson
-import inspect
+from autoRigTools import ARCore
+reload(ARCore)
 reload(ctrSaveLoadToJson)  # review: reload
+
+import inspect
 
 import logging
 logging.basicConfig()
@@ -167,7 +170,7 @@ class RigAuto(object):
 
             # spine type controllers only translate, lock unused attr
             if 'spine' in ctrType:
-                lockAndHideAttr(spineController, False, True, True)
+                ARCore.lockAndHideAttr(spineController, False, True, True)
 
             # create FK controllers
             if n < 3:
@@ -196,12 +199,12 @@ class RigAuto(object):
                 self.ctrGrp.addChild(spineFKControllerList[0])
 
         # create roots grp
-        createRoots(spineFKControllerList)
-        spineControllerRootsList = createRoots(spineIKControllerList)
+        ARCore.createRoots(spineFKControllerList)
+        spineControllerRootsList = ARCore.createRoots(spineIKControllerList)
 
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
         for neckHeadIKCtr in spineFKControllerList[1:]:
-            lockAndHideAttr(neckHeadIKCtr, True, False, False)
+            ARCore.lockAndHideAttr(neckHeadIKCtr, True, False, False)
 
         # create points on curve that will drive the joints
         jointDriverList = []
@@ -426,13 +429,13 @@ class RigAuto(object):
         self.ikControllers['spine'][-1].addChild(neckHeadFKCtrList[0])
 
         # create roots grp
-        neckHeadFKCtrRoots = createRoots(neckHeadFKCtrList)
-        neckHeadIKCtrRoots = createRoots(neckHeadIKCtrList)
+        neckHeadFKCtrRoots = ARCore.createRoots(neckHeadFKCtrList)
+        neckHeadIKCtrRoots = ARCore.createRoots(neckHeadIKCtrList)
         # once created roots, we can freeze and hide attributes. if not, it can be unstable
         for neckHeadFKCtr in neckHeadFKCtrList:
-            lockAndHideAttr(neckHeadFKCtr, True, False, False)
+            ARCore.lockAndHideAttr(neckHeadFKCtr, True, False, False)
         # lock and hide neck attr, it's here because we have only one
-        lockAndHideAttr(neckHeadIKCtrList[0], False, True, True)
+        ARCore.lockAndHideAttr(neckHeadIKCtrList[0], False, True, True)
 
         # head orient auto, isolate
         # head orient neck grp
@@ -613,6 +616,7 @@ class RigAuto(object):
             zone: leg
         """
         fkColor = 14 if side == 'left' else 29
+        pointColor = 7 if side == 'left' else 5
         legJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).(?!twist).*%s.*joint$' % (self.chName, side), str(point))]
         legTwistJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).(twist).*%s.*joint$' % (self.chName, side), str(point))]
         logger.debug('%s %s joints: %s' % (side, zone, legJoints))
@@ -704,11 +708,11 @@ class RigAuto(object):
 
         # save to list
         legIkControllerList.append(legIkControl)
-        createRoots(legIkControllerList)
+        ARCore.createRoots(legIkControllerList)
 
         # fkRoots
-        legFkCtrRoots = createRoots(legFkControllersList)
-        createRoots(legFkControllersList, 'auto')
+        legFkCtrRoots = ARCore.createRoots(legFkControllersList)
+        ARCore.createRoots(legFkControllersList, 'auto')
 
         # set preferred angle
         legIkJointList[1].preferredAngleZ.set(-15)
@@ -728,8 +732,8 @@ class RigAuto(object):
         pm.poleVectorConstraint(legPoleController, ikHandle)
 
         # root poleVector
-        legPoleVectorAuto = createRoots([legPoleController])
-        createRoots([legPoleController])
+        legPoleVectorAuto = ARCore.createRoots([legPoleController])
+        ARCore.createRoots([legPoleController])
 
         # TODO: abstract more
         # poleVectorAttributes
@@ -786,11 +790,11 @@ class RigAuto(object):
         # fk strech
         legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
         ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
-                         legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, self.chName, zone,
-                         side)
+                         legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, self.chName, zone, side)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
+        legPointControllers=[]
         for i, joint in enumerate(legMainJointList):
             # attributes
             orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
@@ -804,29 +808,33 @@ class RigAuto(object):
             # review: visibility shape
             plusMinusIkFk.output1D.connect(legFkControllersList[i].visibility)
 
-            lockAndHideAttr(legFkControllersList[i], True, False, False)
+            ARCore.lockAndHideAttr(legFkControllersList[i], True, False, False)
             pm.setAttr('%s.radi' % legFkControllersList[i], channelBox=False, keyable=False)
 
-            # connect to deform skeleton
-            #parentConstraint = pm.orientConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
-
-
+            # connect to deform skeleton review parent
             if len(legTwistList) > i:
                 for j, twistJnt in enumerate(legTwistList[i]):  # exclude first term review
-                    if j == 0:
-                        # todo: connect scales Y Z    Simplify
-                        orientConstraintToJoint = pm.orientConstraint(twistJnt, legJoints[i], maintainOffset=False,name='%s_main_%s_%s_%s_parentConstraint' % (self.chName, zone, side, NameIdList[i]))
-                        pointConstraintToJoint = pm.pointConstraint(twistJnt, legJoints[i], maintainOffset=False,name='%s_main_%s_%s_%s_pointConstraint' % (self.chName, zone, side, NameIdList[i]))
-                        #pm.scaleConstraint(twistJnt, legJoints[i], maintainOffset=False)
-                        twistJnt.scaleY.connect(legJoints[i].scaleY)
-                        twistJnt.scaleZ.connect(legJoints[i].scaleZ)
+                    skinJoint = legJoints[i] if j == 0 else legTwistSyncJoints[i][j-1]
+                    nametype = 'main' if j == 0 else 'twist%s' % j
+                    # orient and scale
+                    pm.orientConstraint(twistJnt, skinJoint, maintainOffset=False,name='%s_%s_%s_%s_%s_orientConstraint' % (self.chName, nametype, zone, side, NameIdList[i]))
+                    twistJnt.scaleY.connect(skinJoint.scaleY)
+                    twistJnt.scaleZ.connect(skinJoint.scaleZ)
+                    # point
+                    if i>0 and j == 0:
+                        pointController = legPointControllers[-1]
+                    elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1) or (i==0 and j==0):
+                        pm.pointConstraint(twistJnt, skinJoint, maintainOffset=False, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zone, side, NameIdList[i]))
+                        continue
                     else:
-                        logger.debug('Leg connecting twist: %s, %s, %s' %(twistJnt, legTwistSyncJoints[i], j))
-                        twstOrientConstraint = pm.orientConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False, name='%s_twist%s_%s_%s_%s_orientConstraint' % (self.chName,j ,zone, side, NameIdList[i]))
-                        twstPointtConstraint = pm.pointConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False, name='%s_twist%s_%s_%s_%s_pointConstraint' % (self.chName,j ,zone, side, NameIdList[i]))
-                        #pm.scaleConstraint(twistJnt, legTwistSyncJoints[i][j-1], maintainOffset=False)
-                        twistJnt.scaleY.connect(legTwistSyncJoints[i][j-1].scaleY)
-                        twistJnt.scaleZ.connect(legTwistSyncJoints[i][j-1].scaleZ)
+                        pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zone, side, NameIdList[i]), 'twistPoint_%s' % side, 1, pointColor)
+                        pointController, rootPointController, pointConstraint = ARCore.jointPointToController([twistJnt], pointController)
+                        joint.addChild(rootPointController[0])
+                        pointController = pointController[0]
+                        legPointControllers.append(pointController)  # save to list
+
+                    pm.pointConstraint(pointController, skinJoint, maintainOffset=True, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zone, side, NameIdList[i]))
+
 
         # ik blending controller attr
         ikFkshape.ikFk.connect(legPoleController.visibility)
@@ -1052,15 +1060,15 @@ class RigAuto(object):
             toesIkControllerList.append(toeIkGeneralController)
 
             # fk Roots and autos
-            footFkRoots = createRoots(footFkControllerList)
-            footFkAuto = createRoots(footFkControllerList, 'auto')
-            footIkRoots = createRoots(footIkControllerList)
-            footRollAuto = createRoots(footFootRollCtr, 'footRollAuto')
-            footIkAuto = createRoots(footIkControllerList, 'auto')
-            toesFkRoots = createRoots(toesFkControllerList)
-            toesFkAuto = createRoots(toesFkControllerList, 'auto')
-            toesIkRoots = createRoots(toesIkControllerList)
-            toesIkAuto = createRoots(toesIkControllerList, 'auto')
+            footFkRoots = ARCore.createRoots(footFkControllerList)
+            footFkAuto = ARCore.createRoots(footFkControllerList, 'auto')
+            footIkRoots = ARCore.createRoots(footIkControllerList)
+            footRollAuto = ARCore.createRoots(footFootRollCtr, 'footRollAuto')
+            footIkAuto = ARCore.createRoots(footIkControllerList, 'auto')
+            toesFkRoots = ARCore.createRoots(toesFkControllerList)
+            toesFkAuto = ARCore.createRoots(toesFkControllerList, 'auto')
+            toesIkRoots = ARCore.createRoots(toesIkControllerList)
+            toesIkAuto = ARCore.createRoots(toesIkControllerList, 'auto')
 
             # connect toes rotate attributes and set limits
             for ikOrFk in [toesFkAuto, toesIkAuto]:
@@ -1081,8 +1089,8 @@ class RigAuto(object):
 
 
             # lock and hide attributes. after root creation
-            lockAndHideAttr(footIkControllerList[1:], True, False, True)
-            lockAndHideAttr(toesIkControllerList[-1], True, False, True)
+            ARCore.lockAndHideAttr(footIkControllerList[1:], True, False, True)
+            ARCore.lockAndHideAttr(toesIkControllerList[-1], True, False, True)
 
             # ik ctr autos
             for i, autoGrp in enumerate(footIkAuto[1:]):
@@ -1158,8 +1166,7 @@ class RigAuto(object):
                 else:
                     orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zone, side))
 
-
-                lockAndHideAttr(footFkControllerList[i], True, False, False)
+                ARCore.lockAndHideAttr(footFkControllerList[i], True, False, False)
                 pm.setAttr('%s.radi' % footFkControllerList[i], channelBox=False, keyable=False)
 
                 # connect to deform skeleton
@@ -1188,8 +1195,8 @@ class RigAuto(object):
                 plusMinusIkFk.output1D.connect(pointConstraint.attr('%sW1' % str(toesFkControllerList[i])))
                 plusMinusIkFk.output1D.connect(toesFkControllerList[i].visibility)
 
-                #lockAndHideAttr(toesFkControllerList[i], True, False, False)
-                #lockAndHideAttr(toesIkControllerList[i], True, False, False)
+                #ARCore.lockAndHideAttr(toesFkControllerList[i], True, False, False)
+                #ARCore.lockAndHideAttr(toesIkControllerList[i], True, False, False)
 
                 pm.setAttr('%s.radi' % toesFkControllerList[i], channelBox=False, keyable=False)
 
@@ -1281,73 +1288,6 @@ def relocatePole(pole, joints, distance=1):
 
     pole.setTransformation([xVector.x, xVector.y, xVector.z, 0, yVector.x, yVector.y, yVector.z, 0, poleVector.x, poleVector.y, poleVector.z, 0,
                        poleVector.x * distance + position2[0], poleVector.y * distance + position2[1], poleVector.z * distance + position2[2], 1])
-
-def createRoots(list, suffix='root'):
-    """
-    Create root on elements, respecting their present hierarchy.
-    Args:
-        list(list)(pm.Transform)(pm.Joint): list of transforms to create root, on joints set joint orient to 0
-        suffix(str): suffix for the root grp
-
-    Returns:
-
-    """
-    roots = []
-    for arg in list:
-        try:
-            parent = arg.firstParent()
-        except:
-            parent = None
-        # explanation: pm getTransformation gives transform matrix in object space.
-        # so we need to use pm.xform()
-        rootGrp = pm.group(em=True, name='%s_%s' % (arg, suffix))
-        matrixTransform = pm.xform(arg, q=True, ws=True, m=True)
-        pm.xform(rootGrp, ws=True, m=matrixTransform)
-
-        if parent:
-            parent.addChild(rootGrp)
-        rootGrp.addChild(arg)
-
-        # if is a joint, assegure reset values
-        if isinstance(arg, pm.nodetypes.Joint):
-            for axis in ('X', 'Y', 'Z'):
-                arg.attr('jointOrient%s' % axis).set(0.0)
-
-            arg.setRotation((0,0,0), 'object')
-
-        roots.append(rootGrp)
-
-    return roots
-
-def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
-    """
-    lock and hide transform attributes
-    # TODO: add limit operations
-    Args:
-        obj(pm.Trasform): Element to lock and hide
-        translate(True): true, lock and hide translate
-        rotate(True): true, lock and hide rotate
-        scale(True): true, lock and hide scale
-    """
-    if isinstance(obj, list):
-        itemList = obj
-    else:
-        itemList = []
-        itemList.append(obj)
-
-    for item in itemList:
-        if translate:
-            item.translate.lock()
-            for axis in ('X', 'Y', 'Z'):
-                pm.setAttr('%s.translate%s' % (str(item), axis), channelBox=False, keyable=False)
-        if rotate:
-            item.rotate.lock()
-            for axis in ('X', 'Y', 'Z'):
-                pm.setAttr('%s.rotate%s' % (str(item), axis), channelBox=False, keyable=False)
-        if scale:
-            item.scale.lock()
-            for axis in ('X', 'Y', 'Z'):
-                pm.setAttr('%s.scale%s' % (str(item), axis), channelBox=False, keyable=False)
 
 
 
@@ -1665,17 +1605,19 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
 
     for i, CVJoint in enumerate(conserveVolumeJointList):
         # ik
-        ikCVNode = connectConserveVolumeToAnimNode(conserveVolumeAnimCurve, i, iKInvConserveVolumeF, ikConserveVolumeScaleFactor)
+        ikCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, iKInvConserveVolumeF, ikConserveVolumeScaleFactor)
         # fk
-        fkCVNode = connectConserveVolumeToAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkCVScaleFactor)
+        fkCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkCVScaleFactor)
         # main blending
         # connect to joint
         mainBlending(ikCVNode, fkCVNode, CVJoint, nodeAttr, 'ikFk', 'scaleY', 'scaleZ')
 
-    # connect to main joints formula: A+(B-A)*blend for joint, add twistBones, and stretch too
+    # to main joints formula: A+(B-A)*blend for joint, add twistBones, and stretch too
     # TODO: sustitute by mainBlending func
     for i, fkOut in enumerate(outputFk):
+        # blending
         plusMinusToMain = mainBlending(outputIk[i], fkOut, mainJoints[i], nodeAttr, 'ikFk', 'translateX')
+        # stretch to twist joints
 
         if twsitMainJoints:
             # twist joints main translate review names
@@ -1685,11 +1627,11 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
             plusMinusToMain.output1D.connect(multiplyDivideTwstJnt.input1X)
             # connect to joints
             for twstJnt in twsitMainJoints[i][1:]:
-                # first joint of the twistMainJoint does not has to move
+                # first joint of the twistMainJoint does not has to move ()
                 multiplyDivideTwstJnt.outputX.connect(twstJnt.translateX)
 
 
-def connectConserveVolumeToAnimNode(animCurve, varyTime, invFactor, Factor):
+def conserveVolumeAnimNode(animCurve, varyTime, invFactor, Factor):
     """
     create circuity nodes to attach a curveAnim to control outputs values
     Args:
