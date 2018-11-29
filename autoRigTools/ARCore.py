@@ -1,5 +1,11 @@
 import pymel.core as pm
+from maya import OpenMaya
 from autoRigTools import ctrSaveLoadToJson
+
+import logging
+logging.basicConfig()
+logger = logging.getLogger('ARCore:')
+logger.setLevel(logging.DEBUG)
 
 
 def createRoots(listObjects, suffix='root'):
@@ -124,3 +130,33 @@ def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
             for axis in ('X', 'Y', 'Z'):
                 pm.setAttr('%s.scale%s' % (str(item), axis), channelBox=False, keyable=False)
 
+def arrangeListByHierarchy(itemList):
+    """
+    Arrange a list by hierarchy
+    p.e [[toea1, toea2, ...], [toeb, toeb_tip]]
+    Args:
+        itemList:
+    Returns(list(list)): final list
+    """
+    def hierarchySize(obj):
+        # key func for sort
+        fullPath = obj.fullPath()
+        sizeFullPath = fullPath.split('|')
+        return len(sizeFullPath)
+
+    toesJointsCopy = list(itemList)  # copy of the toes list
+    toesJointsArr = []
+    while len(toesJointsCopy):
+        toeJoint = []
+        firstJoint = toesJointsCopy.pop(0)
+        toeJoint.append(firstJoint)
+        for joint in firstJoint.listRelatives(ad=True):
+            if joint in toesJointsCopy:
+                toeJoint.append(joint)
+                toesJointsCopy.remove(joint)
+
+        # sort the list to assure a good order
+        toesJointsArr.append(sorted(toeJoint, key=hierarchySize))
+    logger.debug('arrangeListByHierarchy: sorted: %s' % toesJointsArr)
+
+    return toesJointsArr

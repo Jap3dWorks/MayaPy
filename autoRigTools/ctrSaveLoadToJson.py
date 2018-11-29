@@ -87,7 +87,7 @@ def ctrLoadJson(typeController, name, path, SFactor=1, ColorIndex = 4):
         path: path of file
         SFactor: scale factor
         ColorIndex: color index
-    Returns: fullPathName of createdController
+    Returns: fullPathName of createdController, transform matrix
     """
     controllerFile = ('%s/%s_controllers.json' % (path, name))
 
