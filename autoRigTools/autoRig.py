@@ -673,7 +673,7 @@ class RigAuto(object):
 
                 else:
                     # connect and setup leg Twist Ini chain
-                    twistJointsConnect(legTwistIni, legMainJointList[-1], self.chName, zone, side, controllerName)
+                    twistJointsConnect(legTwistIni, legMainJointList[-1], '%s_%s_%s_%s' % (self.chName, controllerName, zone, side))
 
             NameIdList.append(controllerName)
 
@@ -790,7 +790,7 @@ class RigAuto(object):
         # fk strech
         legFkrootsDistances, legMaxiumDistance = calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
         ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
-                         legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, self.chName, zone, side)
+                         legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zone, side))
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
@@ -915,7 +915,7 @@ class RigAuto(object):
             legMainJointList[-1].addChild(footMainJointsList[0])
 
             # twistJointsConnections
-            twistJointsConnect(footTwstList, footMainJointsList[0], self.chName, footTwstZone, side, footTwstCtrName, footpointCnstr)
+            twistJointsConnect(footTwstList, footMainJointsList[0], '%s_%s_%s_%s' % (self.chName, footTwstCtrName, footTwstZone, side), footpointCnstr)
 
             # create toe Fk and ik ctr
             # last foot fkCtr, easiest fot later access
@@ -1329,13 +1329,13 @@ def snapCurveToPoints(points, curve, iterations=4, precision=0.05):
 
     mfnNurbsCurve.updateCurve()
 
-def twistJointsConnect(twistMainJoints, trackMain, chName, zone, side, controllerName, pointCnstr=None):
+def twistJointsConnect(twistMainJoints, trackMain, nameInfo, pointCnstr=None):
     """
     Connect and setup orient for twist joints
     Args:
         twistMainJoints(list)(pm.Joint): chain of twist joints
         trackMain(pm.Joint): main joint where trackGroup will be oriented constraint
-        pointCnstr: object where the twistMainJoints[0] will be pointconstrained, if this arg is given, an extra group is created. to track correctly
+        pointCnstr: object where the twistMainJoints[0] will be pointConstrained, if this arg is given, an extra group is created. to track correctly
         the main joint
         chName: name of the character
         zone: leg, arm
@@ -1344,7 +1344,7 @@ def twistJointsConnect(twistMainJoints, trackMain, chName, zone, side, controlle
     """
     # if not pointCnstr use main joint
     if pointCnstr:
-        twistRefGrp = pm.group(empty=True, name='%s_twistOri_%s_%s_%s_grp' % (chName, zone, side, controllerName))
+        twistRefGrp = pm.group(empty=True, name='%s_twistOri_grp' % nameInfo)
         pm.xform(twistRefGrp, ws=True, ro=pm.xform(twistMainJoints[0], ws=True, q=True, ro=True))
         pm.xform(twistRefGrp, ws=True, t=pm.xform(trackMain, ws=True, q=True, t=True))
         trackMain.addChild(twistRefGrp)
@@ -1354,27 +1354,33 @@ def twistJointsConnect(twistMainJoints, trackMain, chName, zone, side, controlle
         twistRefGrp = trackMain
 
     # group that will be used for store orientation, with a orientConstraint
-    trackGroup = pm.group(empty=True, name='%s_twistOri_%s_%s_%s_grp' % (chName, zone, side, controllerName))
+    trackGroup = pm.group(empty=True, name='%s_twistOri_grp' % nameInfo)
 
     pm.xform(trackGroup, ws=True, m=pm.xform(twistMainJoints[0], ws=True, q=True, m=True))
     twistMainJoints[0].addChild(trackGroup)  # parent first joint of the chain
 
     # constraint to main
-    twstOrientCntr = pm.orientConstraint(twistRefGrp, trackGroup, maintainOffset=False, name='%s_twistOri_%s_%s_%s_orientContraint' % (chName, zone, side, controllerName))
-    # necessary for strech, if not, twist joint does not follow main joints
-    twstPointCnstr = pm.pointConstraint(pointCnstr, twistMainJoints[0], maintainOffset=False, name='%s_twistPnt_%s_%s_%s_pointConstraint' % (chName, zone, side, controllerName))
+    twstOrientCntr = pm.orientConstraint(twistRefGrp,twistMainJoints[0], trackGroup, maintainOffset=True, name='%s_twistOri_orientContraint' % nameInfo)
+    twstOrientCntr.interpType.set(0)
+    # necessary for stretch, if not, twist joint does not follow main joints
+    pm.pointConstraint(pointCnstr, twistMainJoints[0], maintainOffset=False, name='%s_twistPnt_pointConstraint' % nameInfo)
     # CreateIk
-    twstIkHandle, twstIkEffector = pm.ikHandle(startJoint=twistMainJoints[0], endEffector=twistMainJoints[1], solver='ikRPsolver', name='%s_twist_%s_%s_%s_ikHandle' % (chName, zone, side, controllerName))
+    twstIkHandle, twstIkEffector = pm.ikHandle(startJoint=twistMainJoints[0], endEffector=twistMainJoints[1], solver='ikRPsolver', name='%s_twist_ikHandle' % nameInfo)
     pointCnstr.addChild(twstIkHandle)
     # set Polevector to 0 0 0
     for axis in ('X', 'Y', 'Z'):
         twstIkHandle.attr('poleVector%s' % axis).set(0)
 
+    #multiply x2 rotation
+    multiplyX2 = pm.createNode('multiplyDivide', name='%s_twist_X2_multiplyDivide' % nameInfo)
+    multiplyX2.input2X.set(2)
+    trackGroup.rotateX.connect(multiplyX2.input1X)
+
     # nodes and connect to twist nodes rotations
-    twstMultiplyDivide = pm.createNode('multiplyDivide', name='%s_twist_%s_%s_%s_multiplyDivide' % (chName, zone, side, controllerName))
+    twstMultiplyDivide = pm.createNode('multiplyDivide', name='%s_twist_multiplyDivide' % nameInfo)
     twstMultiplyDivide.input2X.set(len(twistMainJoints) - 1)
-    twstMultiplyDivide.operation.set(2)
-    trackGroup.rotateX.connect(twstMultiplyDivide.input1X)
+    twstMultiplyDivide.operation.set(2)  # dividsion
+    multiplyX2.outputX.connect(twstMultiplyDivide.input1X)
     # connect node to twist joint
     for k, twstJoint in enumerate(twistMainJoints):
         if k == 0:  # first joint nothing
@@ -1468,7 +1474,7 @@ def calcDistances(pointList,vector=False):
 
     return distancesList, totalDistance
 
-def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, char, zone, side):
+def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, nameInfo):
     """
     create ik and fk stretch system with twistJoints, stretching by translate
     all the lists must be of the same len()
@@ -1477,7 +1483,7 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         fkDistances(list(float)): list of distances between chain elements 2
         nodeAttr(pm.dagNode): shape with ikFk attribute, where fk stretch attribute will be added
         ikObjList(list): top object and lower object in a ik system 2
-        ikDistance(float): maximum distance between top and lower element in a ik and fk system
+        ikDistance(float): maximum distance between top and lower element in a ik and fk system # calculate in the func?
         ikJoints(list): ikJoints that will stretch (no the first joint) 2
         char, zone, side: info
         mainJoints(list(pm.Joint)): MainJoints to connect the stretch (no the first joint) 2
@@ -1488,13 +1494,13 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     # fk system
     # create attr
     attrName = 'fkStrech'
-    maxValue= 50
+    maxValue = 50
     pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=-maxValue, maxValue=maxValue, type='float', defaultValue=0.0, k=True)
     outputFk = []
     for n, obj in enumerate(fkObjList):
-        plusNode = pm.createNode('plusMinusAverage', name='%s_strech' % str(obj))
+        plusNode = pm.createNode('plusMinusAverage', name='%s_fkStretch_plusMinusAverage' % nameInfo)
         # invert if negative values
-        invertNode = pm.createNode('multiplyDivide')
+        invertNode = pm.createNode('multiplyDivide', name='%s_fkStretch_multiplyDivide' % nameInfo)
         invertNode.operation.set(1)
         invertNode.input2X.set(obj.translateX.get()/abs(obj.translateX.get()))
         nodeAttr.attr(attrName).connect(invertNode.input1X)
@@ -1507,24 +1513,24 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
 
     # ik system
     # distance between objetcs, and connect matrix
-    distanceBetween = pm.createNode('distanceBetween', name='%s_ikStrech_%s_%s_distanceBetween' % (char, zone, side))
+    distanceBetween = pm.createNode('distanceBetween', name='%s_ikStretch_distanceBetween' % nameInfo)
     for i in range(len(ikObjList)):
         # use helpers to avoid cycle checks
-        positionTrackIk = pm.group(empty=True)
+        positionTrackIk = pm.group(empty=True, name='%s_ikStretch_track%s__grp' % (nameInfo, i+1))
         ikObjList[i].firstParent().addChild(positionTrackIk)
         pm.xform(positionTrackIk, ws=True, m=pm.xform(ikObjList[i], ws=True, q=True, m=True))
 
         positionTrackIk.worldMatrix[0].connect(distanceBetween.attr('inMatrix%s' % (i+1)))
 
     # conditional node
-    conditionalScaleFactor = pm.createNode('condition', name='%s_ikStrech_%s_%s_conditional' % (char, zone, side))
+    conditionalScaleFactor = pm.createNode('condition', name='%s_ikStretch_stretchValue_conditional' % nameInfo)  # review stretchValue
     conditionalScaleFactor.operation.set(2)
     conditionalScaleFactor.colorIfFalseR.set(1)
     # connect distance to conditional
     distanceBetween.distance.connect(conditionalScaleFactor.firstTerm)
     conditionalScaleFactor.secondTerm.set(abs(ikDistance))
     # scaleFactor
-    multiplydivide = pm.createNode('multiplyDivide', name='%s_ikStrech_%s_%s_conditional' % (char, zone, side))
+    multiplydivide = pm.createNode('multiplyDivide', name='%s_ikStretch_multiplyDivide' % nameInfo)
     multiplydivide.operation.set(2)  # set to divide
     distanceBetween.distance.connect(multiplydivide.input1X)
     multiplydivide.input2X.set(abs(ikDistance))
@@ -1536,76 +1542,74 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     outputIk = []
     conserveVolumeJointList = []
     for i, joint in enumerate(ikJoints):
-        # TODO: rename nodes
-        multiplyTranslate = pm.createNode('multiplyDivide', name='%s_strech' % str(joint))
+        multiplyTranslate = pm.createNode('multiplyDivide', name='%s_ikStretch_jointValue_multiplyDivide' % nameInfo)
         conditionalScaleFactor.outColorR.connect(multiplyTranslate.input1X)
         multiplyTranslate.input2X.set(joint.translateX.get())
-        # conencto to joint
+        # connect to joint
         multiplyTranslate.outputX.connect(joint.translateX)
         outputIk.append(multiplyTranslate)
 
         # create a list with all twist joints of the system
         conserveVolumeJointList += twsitMainJoints[i]
 
-    # fk Stretch, calculate scale factor
+    # fk Stretch, calculate scale factor TODO: fk stretch by multiplier value, better for ik fk blend
     # plus value and maxium value
-    fkCVplusAverage = pm.createNode('plusMinusAverage')
+    fkCVplusAverage = pm.createNode('plusMinusAverage', name='%s_fkStretch_PlusMaximum_plusMinusAverage' % nameInfo)
     nodeAttr.attr(attrName).connect(fkCVplusAverage.input1D[0])
     fkCVplusAverage.input1D[1].set(maxValue)
     # fkCVplusAverage / maxiumValu per 2
-    fkCVMultiply = pm.createNode('multiplyDivide')
+    fkCVMultiply = pm.createNode('multiplyDivide', name='%s_fkStretch_plusMinusAverage' % nameInfo)
     fkCVMultiply.operation.set(2)  # divide
     fkCVplusAverage.output1D.connect(fkCVMultiply.input1X)
     fkCVMultiply.input2X.set(2 * maxValue)
     # substract to max posible stretch
-    fkCVScaleFactor = pm.createNode('plusMinusAverage')
+    fkCVScaleFactor = pm.createNode('plusMinusAverage', name='%s_fkStretch_plusMinusAverage' % nameInfo)
     fkCVScaleFactor.operation.set(2)  # substract
     fkCVScaleFactor.input1D[0].set(1)
     fkCVMultiply.outputX.connect(fkCVScaleFactor.input1D[1])
     fkCVScaleFactor.input1D[2].set(-0.5)  # final fk Stretch output
     # invert
-    fkCVScaleFactorInvert = pm.createNode('plusMinusAverage')
+    fkCVScaleFactorInvert = pm.createNode('plusMinusAverage', name='%s_fkStretch_Invert_plusMinusAverage' % nameInfo)
     fkCVScaleFactorInvert.operation.set(2)  # substract
     fkCVScaleFactorInvert.input1D[0].set(1)
     fkCVScaleFactor.output1D.connect(fkCVScaleFactorInvert.input1D[1])
 
     # ik stretch
     # conserveVolume using conditionalScaleFactor ->  1/conditionalScaleFactor   get inverse
-    ikConserveVolumeScaleFactor = pm.createNode('multiplyDivide', name='%s_%s_%s_conserveVolume_multiplyDivide' % (char, zone, side))
+    ikConserveVolumeScaleFactor = pm.createNode('multiplyDivide', name='%s_conserveVolume_multiplyDivide' % nameInfo)
     ikConserveVolumeScaleFactor.operation.set(2)  # set to divide
     ikConserveVolumeScaleFactor.input1X.set(1)
     conditionalScaleFactor.outColorR.connect(ikConserveVolumeScaleFactor.input2X)
     # create animNode to control scale
-    conserveVolumeAnimCurve = pm.createNode('animCurveTU', name='%s_%s_%s_conserveVolume_animCurveTU' % (char, zone, side))
+    conserveVolumeAnimCurve = pm.createNode('animCurveTU', name='%s_conserveVolume_animCurveTU' % nameInfo)
     # draw curve
     conserveVolumeAnimCurve.addKeyframe(0, 0.3)
     conserveVolumeAnimCurve.addKeyframe((len(conserveVolumeJointList) - 1) // 2, 1.0)
     conserveVolumeAnimCurve.addKeyframe(len(conserveVolumeJointList) - 2, 0.3)
     # invert cv  -> (1-cv)
-    iKInvConserveVolumeF = pm.createNode('plusMinusAverage')
+    iKInvConserveVolumeF = pm.createNode('plusMinusAverage', name='%s_conserveVolume_invertFactor_animCurveTU' % nameInfo)
     iKInvConserveVolumeF.operation.set(2)  # substract
     iKInvConserveVolumeF.input1D[0].set(1)
     ikConserveVolumeScaleFactor.outputX.connect(iKInvConserveVolumeF.input1D[1])
 
     for i, CVJoint in enumerate(conserveVolumeJointList):
         # ik
-        ikCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, iKInvConserveVolumeF, ikConserveVolumeScaleFactor)
+        ikCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, iKInvConserveVolumeF, ikConserveVolumeScaleFactor, nameInfo)
         # fk
-        fkCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkCVScaleFactor)
+        fkCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkCVScaleFactor, nameInfo)
         # main blending
         # connect to joint
-        mainBlending(ikCVNode, fkCVNode, CVJoint, nodeAttr, 'ikFk', 'scaleY', 'scaleZ')
+        mainBlending(ikCVNode, fkCVNode, nodeAttr.attr('ikFk'),'%s_conserveVolume' % nameInfo, CVJoint.scaleY, CVJoint.scaleZ)
 
     # to main joints formula: A+(B-A)*blend for joint, add twistBones, and stretch too
-    # TODO: sustitute by mainBlending func
     for i, fkOut in enumerate(outputFk):
         # blending
-        plusMinusToMain = mainBlending(outputIk[i], fkOut, mainJoints[i], nodeAttr, 'ikFk', 'translateX')
+        plusMinusToMain = mainBlending(outputIk[i], fkOut, nodeAttr.attr('ikFk'),'%s_stretch' % nameInfo, mainJoints[i].translateX)
         # stretch to twist joints
 
         if twsitMainJoints:
             # twist joints main translate review names
-            multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStrech_%s_%s_multiplyDivide' % (char, zone, side))
+            multiplyDivideTwstJnt = pm.createNode('multiplyDivide', name='%s_mainTwistStretch_multiplyDivide' % nameInfo)
             multiplyDivideTwstJnt.operation.set(2)  # divide
             multiplyDivideTwstJnt.input2X.set(len(twsitMainJoints[i])-1)  # try change sign here review
             plusMinusToMain.output1D.connect(multiplyDivideTwstJnt.input1X)
@@ -1615,14 +1619,15 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
                 multiplyDivideTwstJnt.outputX.connect(twstJnt.translateX)
 
 
-def conserveVolumeAnimNode(animCurve, varyTime, invFactor, Factor):
+def conserveVolumeAnimNode(animCurve, varyTime, invFactor, Factor, nameInfo):
     """
-    create circuity nodes to attach a curveAnim to control outputs values
+    create circuity nodes to attach a curveAnim to control outputs values. useful for better results on stretch
     Args:
         animCurve(animNode): anim curve
-        varyTime(index): frame
-        invFactor(node): node with 1-Factor
+        varyTime(index): frame to track value from the curve
+        invFactor(node): plusMinusAverage node with 1-Factor
         Factor(node): scale Factor maxium
+        nameInfo: list of three elements with name info p.e('akona', 'leg', 'lowerLeg')
 
     Returns: multiplyDivide node with final factor
 
@@ -1631,54 +1636,56 @@ def conserveVolumeAnimNode(animCurve, varyTime, invFactor, Factor):
     outputType = 'outputX' if isinstance(Factor, pm.nodetypes.MultiplyDivide) else 'output1D'
 
     # frame cache
-    CVFrameCache = pm.createNode('frameCache')
+    CVFrameCache = pm.createNode('frameCache', name='%s_%s_%s_conserveVolume_frame' % (nameInfo[0], nameInfo[1], nameInfo[2]))
     animCurve.output.connect(CVFrameCache.stream)
     CVFrameCache.varyTime.set(varyTime)  # i
     # multiply frame cache
-    multiplyFrameCache = pm.createNode('multiplyDivide')
+    multiplyFrameCache = pm.createNode('multiplyDivide', name='%s_%s_%s_conserveVolume_multiplyDivide' % (nameInfo[0], nameInfo[1], nameInfo[2]))
     CVFrameCache.varying.connect(multiplyFrameCache.input1X)
     invFactor.output1D.connect(multiplyFrameCache.input2X)
     # plus conserveVolume
-    plusConVolum = pm.createNode('plusMinusAverage')
+    plusConVolum = pm.createNode('plusMinusAverage', name='%s_%s_%s_conserveVolume_plusMinusAverage' % (nameInfo[0], nameInfo[1], nameInfo[2]))
     multiplyFrameCache.outputX.connect(plusConVolum.input1D[0])
     Factor.attr(outputType).connect(plusConVolum.input1D[1])
-    # divide volumeScalefactor / plusConVolum
-    divideConVol = pm.createNode('multiplyDivide')
+    # divide volumeScalefactor / plusConserveVolum
+    divideConVol = pm.createNode('multiplyDivide', name='%s_%s_%s_conserveVolume_divide_multiplyDivide' % (nameInfo[0], nameInfo[1], nameInfo[2]))
     divideConVol.operation.set(2)  # division
     Factor.attr(outputType).connect(divideConVol.input1X)
     plusConVolum.output1D.connect(divideConVol.input2X)
 
     return divideConVol
 
-def mainBlending(ikNode, fkNode, mainNode, attrNode,attribute,*args):
+def mainBlending(ikNode, fkNode, blendAttr, nameInfo, *args):
     """
     create circuitry nodes to blend ik value to fk value
     Args:
-        ikNode:
-        fkNode:
-        mainNode:
-        args: attributes to connect
+        ikNode(pm.dependNode): node with stretch ik values
+        fkNode(pm.dependNode): node with stretch Fk values
+        blendAttr: attribute that will direct the blend
+        nameInfo: str  with name info p.e('akona_lowerLeg_leg')
+        args(pm.attributes): attributes to connect with the blend. pe. mainJoint.translateX (pm object)
     Return:
         last node with the blend info
     """
+    # TODO: name scalable
     ikOutputType = 'outputX' if isinstance(ikNode, pm.nodetypes.MultiplyDivide) else 'output1D'
     fKoutputType = 'outputX' if isinstance(fkNode, pm.nodetypes.MultiplyDivide) else 'output1D'
 
-    plusMinusBase=pm.createNode('plusMinusAverage')
+    plusMinusBase=pm.createNode('plusMinusAverage', name='%s_blending_plusMinusAverage' % nameInfo)
     plusMinusBase.operation.set(2)  # substract
     ikNode.attr(ikOutputType).connect(plusMinusBase.input1D[0])
     fkNode.attr(fKoutputType).connect(plusMinusBase.input1D[1])
     # multiply
-    multiplyNode = pm.createNode('multiplyDivide')
-    attrNode.attr(attribute).connect(multiplyNode.input1X)
+    multiplyNode = pm.createNode('multiplyDivide', name='%s_blending_multiplyDivide' % nameInfo)
+    blendAttr.connect(multiplyNode.input1X)
     plusMinusBase.output1D.connect(multiplyNode.input2X)
     # plus Fk
-    plusIkFkBlend = pm.createNode('plusMinusAverage')
+    plusIkFkBlend = pm.createNode('plusMinusAverage', name='%s_blendingPlusFk_plusMinusAverage' % nameInfo)
     multiplyNode.outputX.connect(plusIkFkBlend.input1D[0])
     fkNode.attr(fKoutputType).connect(plusIkFkBlend.input1D[1])
 
     # connect to main attributes
     for arg in args:
-        plusIkFkBlend.output1D.connect(mainNode.attr(arg))
+        plusIkFkBlend.output1D.connect(arg)
 
     return plusIkFkBlend
