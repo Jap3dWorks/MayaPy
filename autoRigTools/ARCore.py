@@ -605,10 +605,45 @@ def snapCurveToPoints(points, curve, iterations=4, precision=0.05):
 
     mfnNurbsCurve.updateCurve()
 
-def alignTransformToPlane(transform, plane='zx'):
+def alignTransformToPlane(matrix, plane='zx'):
     """
-    Conserve the general orient of a transform, but aligned to a plane
+    Conserve the general orient of a matrixTransform, but aligned to a plane
     Args:
-        controller(pm.transform): transform node
-        plane(string): zx, xy, yz
+        controller(pm.transform): transform matrix
+        plane(string): zx, xy, yz  lower case, first vector is the prefered vector
     """
+    if len(plane) > 2:
+        logger.info('insert a valid plane')
+        return
+
+    axisList = ['x', 'y', 'z']
+
+    vectors = {}
+    vIndex = 0
+    # store initial vectors
+    for axis in axisList:
+        vectors[axis] = OpenMaya.MVector(matrix[vIndex], matrix[vIndex+1], matrix[vIndex+2])
+        vIndex += 4
+
+    # find resetable axis
+    axisStr = ''.join(axisList)  # convert axis list in axis string
+    resetAxis = axisStr.replace(plane, '')
+    resetIndex = axisList.index(resetAxis)
+
+    # reset the axis
+    for key, vector in vectors.iteritems():
+        if key == resetAxis:  # this is not necessary to reset
+            continue
+        vector[resetIndex] = 0
+        vector.normalize()
+
+    vectors[resetAxis] = vectors[plane[1]] ^ vectors[plane[0]]
+    vectors[resetAxis].normalize()
+    vectors[plane[1]] = vectors[resetAxis] ^ vectors[plane[0]]
+    vectors[plane[1]].normalize()
+
+
+    returnMatrix = [vectors[axisList[0]].x, vectors[axisList[0]].y, vectors[axisList[0]].z, matrix[3], vectors[axisList[1]].x, vectors[axisList[1]].y, vectors[axisList[1]].z, matrix[7],
+                vectors[axisList[2]].x, vectors[axisList[2]].y, vectors[axisList[2]].z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
+
+    return returnMatrix

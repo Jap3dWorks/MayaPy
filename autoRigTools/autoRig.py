@@ -878,7 +878,7 @@ class RigAuto(object):
                 # get transformMatrix and orient new controller TODO: function
                 matrix = pm.xform(footFkCtr, ws=True, q=True, m=True)
 
-                vectorX = OpenMaya.MVector(matrix[0], 0, matrix[1])
+                vectorX = OpenMaya.MVector(matrix[0], 0, matrix[1])  # review matrix[1 or 2]
                 vectorX.normalize()
                 vectorZ = OpenMaya.MVector(matrix[8], 0, matrix[10])
                 vectorZ.normalize()
