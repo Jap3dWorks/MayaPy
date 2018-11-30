@@ -90,11 +90,11 @@ def jointPointToController(joints, controller):
         pm.xform(controllerDup, ws=True, m=pm.xform(joint, ws=True, q=True, m=True))
         controllerRoot = createRoots([controllerDup])[0]
         # point constraint
-        pointConstraint = pm.parentConstraint(joint, controllerRoot)
+        parentConstraint = pm.parentConstraint(joint, controllerRoot)
         # append to lists
         controllerList.append(controllerDup)
         rootList.append(controllerRoot)
-        pointConstraintList.append(pointConstraint)
+        pointConstraintList.append(parentConstraint)
         # lock attr
         lockAndHideAttr(controllerDup, False, True, True)
 

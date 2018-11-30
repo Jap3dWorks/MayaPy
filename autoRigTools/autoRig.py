@@ -1172,6 +1172,7 @@ class RigAuto(object):
 
                 # point constraint to main Joints, review: point constraint toes main. strange behaviour
                 pointConstraint = pm.pointConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=False,  name='%s_%s_%s_%s_mainBlending_pointConstraint' % (self.chName, controllerName, zone, side))
+                #parentConstraintToeA = pm.parentConstraint(toesMainJointsList[0])
 
                 ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
                 ikFkshape.ikFk.connect(pointConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
@@ -1494,21 +1495,29 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     # fk system
     # create attr
     attrName = 'fkStrech'
-    maxValue = 50
-    pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=-maxValue, maxValue=maxValue, type='float', defaultValue=0.0, k=True)
+    pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=.2, maxValue=5, type='float', defaultValue=1.0, k=True)
     outputFk = []
     for n, obj in enumerate(fkObjList):
-        plusNode = pm.createNode('plusMinusAverage', name='%s_fkStretch_plusMinusAverage' % nameInfo)
-        # invert if negative values
-        invertNode = pm.createNode('multiplyDivide', name='%s_fkStretch_multiplyDivide' % nameInfo)
-        invertNode.operation.set(1)
-        invertNode.input2X.set(obj.translateX.get()/abs(obj.translateX.get()))
-        nodeAttr.attr(attrName).connect(invertNode.input1X)
+        multiplyFk = pm.createNode('multiplyDivide', name='%s_fkStretch_multiplyDivide' % nameInfo)
+        multiplyFk.input1X.set(fkDistances[n])
+        nodeAttr.attr(attrName).connect(multiplyFk.input2X)
 
-        invertNode.outputX.connect(plusNode.input1D[0])
-        plusNode.input1D[1].set(fkDistances[n])
-        plusNode.output1D.connect(obj.translateX)
-        outputFk.append(plusNode)
+        multiplyFk.outputX.connect(obj.translateX)
+        outputFk.append(multiplyFk)
+
+    # conserveVolume using conditionalScaleFactor ->  1/conditionalScaleFactor   get inverse
+    fkConserveVolumeScaleFactor = pm.createNode('multiplyDivide', name='%s_fkConserveVolume_multiplyDivide' % nameInfo)
+    fkConserveVolumeScaleFactor.operation.set(2)  # set to divide
+    fkConserveVolumeScaleFactor.input1X.set(1)
+    nodeAttr.attr(attrName).connect(fkConserveVolumeScaleFactor.input2X)
+
+    # need invert
+    # invert  # todo: maybe this in conserveVolumeAnimNode func
+    fkCVScaleFactorInvert = pm.createNode('plusMinusAverage', name='%s_fkStretch_Invert_plusMinusAverage' % nameInfo)
+    fkCVScaleFactorInvert.operation.set(2)  # substract
+    fkCVScaleFactorInvert.input1D[0].set(1)
+    fkConserveVolumeScaleFactor.outputX.connect(fkCVScaleFactorInvert.input1D[1])
+
 
 
     # ik system
@@ -1552,27 +1561,6 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         # create a list with all twist joints of the system
         conserveVolumeJointList += twsitMainJoints[i]
 
-    # fk Stretch, calculate scale factor TODO: fk stretch by multiplier value, better for ik fk blend
-    # plus value and maxium value
-    fkCVplusAverage = pm.createNode('plusMinusAverage', name='%s_fkStretch_PlusMaximum_plusMinusAverage' % nameInfo)
-    nodeAttr.attr(attrName).connect(fkCVplusAverage.input1D[0])
-    fkCVplusAverage.input1D[1].set(maxValue)
-    # fkCVplusAverage / maxiumValu per 2
-    fkCVMultiply = pm.createNode('multiplyDivide', name='%s_fkStretch_plusMinusAverage' % nameInfo)
-    fkCVMultiply.operation.set(2)  # divide
-    fkCVplusAverage.output1D.connect(fkCVMultiply.input1X)
-    fkCVMultiply.input2X.set(2 * maxValue)
-    # substract to max posible stretch
-    fkCVScaleFactor = pm.createNode('plusMinusAverage', name='%s_fkStretch_plusMinusAverage' % nameInfo)
-    fkCVScaleFactor.operation.set(2)  # substract
-    fkCVScaleFactor.input1D[0].set(1)
-    fkCVMultiply.outputX.connect(fkCVScaleFactor.input1D[1])
-    fkCVScaleFactor.input1D[2].set(-0.5)  # final fk Stretch output
-    # invert
-    fkCVScaleFactorInvert = pm.createNode('plusMinusAverage', name='%s_fkStretch_Invert_plusMinusAverage' % nameInfo)
-    fkCVScaleFactorInvert.operation.set(2)  # substract
-    fkCVScaleFactorInvert.input1D[0].set(1)
-    fkCVScaleFactor.output1D.connect(fkCVScaleFactorInvert.input1D[1])
 
     # ik stretch
     # conserveVolume using conditionalScaleFactor ->  1/conditionalScaleFactor   get inverse
@@ -1596,7 +1584,7 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         # ik
         ikCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, iKInvConserveVolumeF, ikConserveVolumeScaleFactor, nameInfo)
         # fk
-        fkCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkCVScaleFactor, nameInfo)
+        fkCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkConserveVolumeScaleFactor, nameInfo)
         # main blending
         # connect to joint
         mainBlending(ikCVNode, fkCVNode, nodeAttr.attr('ikFk'),'%s_conserveVolume' % nameInfo, CVJoint.scaleY, CVJoint.scaleZ)
