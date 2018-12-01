@@ -215,7 +215,7 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     """
     # fk system
     # create attr
-    attrName = 'fkStrech'
+    attrName = 'fkStretch'
     pm.addAttr(nodeAttr, longName=attrName, shortName=attrName, minValue=.2, maxValue=5, type='float', defaultValue=1.0, k=True)
     outputFk = []
     for n, obj in enumerate(fkObjList):
@@ -280,7 +280,8 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         outputIk.append(multiplyTranslate)
 
         # create a list with all twist joints of the system
-        conserveVolumeJointList += twsitMainJoints[i]
+        if twsitMainJoints:
+            conserveVolumeJointList += twsitMainJoints[i]
 
 
     # ik stretch
@@ -605,7 +606,7 @@ def snapCurveToPoints(points, curve, iterations=4, precision=0.05):
 
     mfnNurbsCurve.updateCurve()
 
-def alignTransformToPlane(matrix, plane='zx'):
+def orientToPlane(matrix, plane='zx'):
     """
     Conserve the general orient of a matrixTransform, but aligned to a plane
     Args:
@@ -614,7 +615,7 @@ def alignTransformToPlane(matrix, plane='zx'):
     """
     if len(plane) > 2:
         logger.info('insert a valid plane')
-        return
+        return matrix
 
     axisList = ['x', 'y', 'z']
 
@@ -626,18 +627,20 @@ def alignTransformToPlane(matrix, plane='zx'):
         vIndex += 4
 
     # find resetable axis
-    axisStr = ''.join(axisList)  # convert axis list in axis string
-    resetAxis = axisStr.replace(plane, '')
-    resetIndex = axisList.index(resetAxis)
+    resetAxis = ''.join(axisList)  # convert axis list in axis string
+    logger.debug('axisStr: %s' % resetAxis)
+    for axis in plane:
+        resetAxis = resetAxis.replace(axis, '')
+    logger.debug('reset index: %s' % resetAxis)
 
     # reset the axis
     for key, vector in vectors.iteritems():
         if key == resetAxis:  # this is not necessary to reset
             continue
-        vector[resetIndex] = 0
+        setattr(vector, resetAxis, 0)
         vector.normalize()
 
-    vectors[resetAxis] = vectors[plane[1]] ^ vectors[plane[0]]
+    vectors[resetAxis] = vectors[plane[0]] ^ vectors[plane[1]]
     vectors[resetAxis].normalize()
     vectors[plane[1]] = vectors[resetAxis] ^ vectors[plane[0]]
     vectors[plane[1]].normalize()
