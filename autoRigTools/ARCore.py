@@ -161,7 +161,7 @@ def arrangeListByHierarchy(itemList):
 
     return toesJointsArr
 
-def mainBlending(ikNode, fkNode, blendAttr, nameInfo, *args):
+def attrBlending(ikNode, fkNode, blendAttr, nameInfo, *args):
     """
     create circuitry nodes to blend ik value to fk value
     Args:
@@ -174,8 +174,8 @@ def mainBlending(ikNode, fkNode, blendAttr, nameInfo, *args):
         last node with the blend info
     """
     # TODO: name scalable
-    ikOutputType = 'outputX' if isinstance(ikNode, pm.nodetypes.MultiplyDivide) else 'output1D'
-    fKoutputType = 'outputX' if isinstance(fkNode, pm.nodetypes.MultiplyDivide) else 'output1D'
+    ikOutputType = 'outputX' if isinstance(ikNode, pm.nodetypes.MultiplyDivide) else 'distance' if isinstance(ikNode, pm.nodetypes.DistanceBetween) else 'output1D'
+    fKoutputType = 'outputX' if isinstance(fkNode, pm.nodetypes.MultiplyDivide) else 'distance' if isinstance(fkNode, pm.nodetypes.DistanceBetween) else 'output1D'
 
     plusMinusBase=pm.createNode('plusMinusAverage', name='%s_blending_plusMinusAverage' % nameInfo)
     plusMinusBase.operation.set(2)  # substract
@@ -196,7 +196,7 @@ def mainBlending(ikNode, fkNode, blendAttr, nameInfo, *args):
 
     return plusIkFkBlend
 
-def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, nameInfo):
+def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, nameInfo, poleVector=None):
     """
     create ik and fk stretch system with twistJoints, stretching by translate
     all the lists must be of the same len()
@@ -242,6 +242,11 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
 
 
     # ik system
+    if poleVector:  # if pole, create snap to pole
+        snapPoleAttrStr = 'snapToPole'
+        snapPoleAttr = pm.addAttr(nodeAttr, longName=snapPoleAttrStr, shortName=snapPoleAttrStr, minValue=0, maxValue=1, type='float', defaultValue=0.0, k=True)
+
+    distanceBetweenPoleList=[]
     # distance between objetcs, and connect matrix
     distanceBetween = pm.createNode('distanceBetween', name='%s_ikStretch_distanceBetween' % nameInfo)
     for i in range(len(ikObjList)):
@@ -251,6 +256,20 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         pm.xform(positionTrackIk, ws=True, m=pm.xform(ikObjList[i], ws=True, q=True, m=True))
 
         positionTrackIk.worldMatrix[0].connect(distanceBetween.attr('inMatrix%s' % (i+1)))
+
+        # for knee snap, extract distances from each point to pole vector
+        if poleVector:
+            distanceBetweenPole = pm.createNode('distanceBetween', name='%s_ikStretch_distancePole%s_distanceBetween' % (nameInfo, i+1))
+            positionTrackIk.worldMatrix[0].connect(distanceBetweenPole.inMatrix1)
+            poleVector.worldMatrix[0].connect(distanceBetweenPole.inMatrix2)
+            if ikJoints[i].translateX.get() < 0:
+                invertValue = pm.createNode('multiplyDivide', name='%s_ikStretch_invertValue_multiplyDivide' % nameInfo)
+                invertValue.input2X.set(-1)
+                distanceBetweenPole.distance.connect(invertValue.input1X)
+
+                distanceBetweenPole = invertValue
+
+            distanceBetweenPoleList.append(distanceBetweenPole)
 
     # conditional node
     conditionalScaleFactor = pm.createNode('condition', name='%s_ikStretch_stretchValue_conditional' % nameInfo)  # review stretchValue
@@ -266,7 +285,6 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     multiplydivide.input2X.set(abs(ikDistance))
     # connecto to conditional
     multiplydivide.outputX.connect(conditionalScaleFactor.colorIfTrueR)
-
     # multiply scale factor by joints x transform
     # TODO: create node every 3 connections
     outputIk = []
@@ -275,16 +293,23 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         multiplyTranslate = pm.createNode('multiplyDivide', name='%s_ikStretch_jointValue_multiplyDivide' % nameInfo)
         conditionalScaleFactor.outColorR.connect(multiplyTranslate.input1X)
         multiplyTranslate.input2X.set(joint.translateX.get())
+
         # connect to joint
-        multiplyTranslate.outputX.connect(joint.translateX)
+        # with pole Vector snap
+        if poleVector:
+            ikStretchOutput = attrBlending(distanceBetweenPoleList[i], multiplyTranslate, nodeAttr.attr(snapPoleAttrStr), nameInfo, joint.translateX)
+
+            multiplyTranslate = ikStretchOutput
+        else:
+            multiplyTranslate.outputX.connect(joint.translateX)
+
+        # save per joint output
         outputIk.append(multiplyTranslate)
 
         # create a list with all twist joints of the system
         if twsitMainJoints:
             conserveVolumeJointList += twsitMainJoints[i]
 
-
-    # ik stretch
     # conserveVolume using conditionalScaleFactor ->  1/conditionalScaleFactor   get inverse
     ikConserveVolumeScaleFactor = pm.createNode('multiplyDivide', name='%s_conserveVolume_multiplyDivide' % nameInfo)
     ikConserveVolumeScaleFactor.operation.set(2)  # set to divide
@@ -309,12 +334,12 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         fkCVNode = conserveVolumeAnimNode(conserveVolumeAnimCurve, i, fkCVScaleFactorInvert, fkConserveVolumeScaleFactor, nameInfo)
         # main blending
         # connect to joint
-        mainBlending(ikCVNode, fkCVNode, nodeAttr.attr('ikFk'),'%s_conserveVolume' % nameInfo, CVJoint.scaleY, CVJoint.scaleZ)
+        attrBlending(ikCVNode, fkCVNode, nodeAttr.attr('ikFk'), '%s_conserveVolume' % nameInfo, CVJoint.scaleY, CVJoint.scaleZ)
 
     # to main joints formula: A+(B-A)*blend for joint, add twistBones, and stretch too
     for i, fkOut in enumerate(outputFk):
         # blending
-        plusMinusToMain = mainBlending(outputIk[i], fkOut, nodeAttr.attr('ikFk'),'%s_stretch' % nameInfo, mainJoints[i].translateX)
+        plusMinusToMain = attrBlending(outputIk[i], fkOut, nodeAttr.attr('ikFk'), '%s_stretch' % nameInfo, mainJoints[i].translateX)
         # stretch to twist joints
 
         if twsitMainJoints:

@@ -623,7 +623,7 @@ class RigAuto(object):
         logger.debug('%s %s joints: %s' % (side, zone, legJoints))
         logger.debug('%s %s twist joints: %s' % (side, zone, legTwistJoints))
 
-        # foot
+        # foot, if it's detected, construct foot system (or hand)
         footJoints = [point for point in pm.ls() if re.match('^%s.*([fF]oot).*((?!twist).).*%s.*joint$' % (self.chName, side), str(point))]
 
         # group for leg controls
@@ -725,7 +725,7 @@ class RigAuto(object):
         ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zone, side))
         legIkControl.addChild(ikHandle)
         # create poles
-        legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole')
+        legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole',2)
         ARCore.relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
         legCtrGrp.addChild(legPoleController)
         pm.addAttr(legPoleController, ln='polePosition', at='enum', en="world:root:foot", k=True)
@@ -796,7 +796,7 @@ class RigAuto(object):
             legFkrootsDistances, legMaxiumDistance = ARCore.calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
             #ikFkStretchSetup
             ARCore.ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
-                             legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zone, side))
+                             legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zone, side), legPoleController)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
@@ -937,22 +937,14 @@ class RigAuto(object):
 
                     # get transformMatrix and orient new controller # TODO: function
                     matrix = pm.xform(toeFkCtr, ws=True, q=True, m=True)
-                    vectorX = OpenMaya.MVector(matrix[0], 0, matrix[1])
-                    vectorX.normalize()
-                    vectorZ = OpenMaya.MVector(matrix[8], 0, matrix[10])
-                    vectorZ.normalize()
-                    vectorY = vectorX ^ vectorZ
-                    vectorY.normalize()
-                    vectorX = vectorY ^ vectorZ
-                    vectorX.normalize()
-                    matrix = [vectorX.x, vectorX.y, vectorX.z, matrix[3], vectorY.x, vectorY.y, vectorY.z, matrix[7],
-                                vectorZ.x, vectorZ.y, vectorZ.z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
+                    matrix = ARCore.orientToPlane(matrix, 'zx')  # adjusting orient to plane zx
+
                     # apply transforms constrollers
                     pm.xform(toeFkCtr, ws=True, m=matrix)
                     pm.xform(toeIkCtr, ws=True, m=matrix)
 
                     # fk ik toe control Shape
-                    typeController = controllerName if controllerName[-1] == '1' else controllerName[:-1]  # review
+                    typeController = controllerName if controllerName[-1] == '1' else controllerName[:-1]  # review: detect if it is the first ctr. it's confuse
                     shape = self.create_controller('%sShape' % str(toeFkCtr), '%sFk_%s' % (typeController, side), 1, fkColor)
                     toeFkCtr.addChild(shape.getShape(), s=True, r=True)
                     pm.delete(shape)
