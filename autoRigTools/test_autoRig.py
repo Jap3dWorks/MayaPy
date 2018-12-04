@@ -18,19 +18,19 @@ def spine_head_leg_akona(name='akona'):
     akonaRig.neckHead_auto()
 
     # legs
-    akonaRig.leg_auto('left', akonaRig.ikControllers['spine'][0], 'leg', True)
-    akonaRig.foot_auto('left', ('leg', 'foot', 'toe'), 'zx', True, True)
+    akonaRig.ikFkChain_auto('left', akonaRig.ikControllers['spine'][0], 'leg', True)
+    akonaRig.foot_auto('left', ('leg', 'foot', 'toe'), 'zx')
 
-    akonaRig.leg_auto('right', akonaRig.ikControllers['spine'][0], 'leg', True)
-    akonaRig.foot_auto('right', ('leg', 'foot', 'toe'), 'zx', True, True)
+    akonaRig.ikFkChain_auto('right', akonaRig.ikControllers['spine'][0], 'leg', True)
+    akonaRig.foot_auto('right', ('leg', 'foot', 'toe'), 'zx')
     #akonaRig.arm_auto('left')
 
     # hands
-    akonaRig.leg_auto('left', akonaRig.ikControllers['spine'][-1], 'arm', True)
-    akonaRig.foot_auto('left', ('arm', 'hand', 'finger'),None, False, False)
+    akonaRig.ikFkChain_auto('left', akonaRig.ikControllers['spine'][-1], 'arm', True)
+    akonaRig.hand_auto('left', ('arm', 'hand', 'finger'), None)
 
-    akonaRig.leg_auto('right', akonaRig.ikControllers['spine'][-1], 'arm', True)
-    akonaRig.foot_auto('right', ('arm', 'hand', 'finger'),None, False, False)
+    akonaRig.ikFkChain_auto('right', akonaRig.ikControllers['spine'][-1], 'arm', True)
+    akonaRig.hand_auto('right', ('arm', 'hand', 'finger'), None)
 
     #____#
     cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_left_joint', maintainOffset=True)
