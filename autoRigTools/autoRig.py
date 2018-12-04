@@ -605,8 +605,8 @@ class RigAuto(object):
         self.fkControllers[zone] = neckHeadFKCtrList
         return neckHeadIKCtrList, neckHeadFKCtrList
 
-    @checker_auto('decorated')
-    def leg_auto(self, side, zone='leg', stretch=True):
+    #@checker_auto('decorated')
+    def leg_auto(self, side, parent, zones=('leg','foot','toe'), stretch=True, planeAlign='zx'):
         """
         # TODO: organize and optimize this method,
          tODO: zoneA, zoneB, zoneC, a: leg. b:foot, c:toes
@@ -614,20 +614,25 @@ class RigAuto(object):
         Args:
             side: left or right
             zone: leg or arm
-            stretch(bool)=if true, create stretch system or hand
+            stretch(bool): if true, create stretch system or hand
+            restPoints(list):  with rest points
         """
+        zoneA = zones[0]
+        zoneB = zones[1]
+        zoneC = zones[2]
+
         fkColor = 14 if side == 'left' else 29
         pointColor = 7 if side == 'left' else 5
-        legJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).(?!twist).*%s.*joint$' % (self.chName, side), str(point))]
-        legTwistJoints = [point for point in pm.ls() if re.match('^%s.*([lL]eg).(twist).*%s.*joint$' % (self.chName, side), str(point))]
-        logger.debug('%s %s joints: %s' % (side, zone, legJoints))
-        logger.debug('%s %s twist joints: %s' % (side, zone, legTwistJoints))
+        legJoints = [point for point in pm.ls() if re.match('^%s.*(%s).(?!twist).*%s.*joint$' % (self.chName, zoneA, side), str(point))]
+        legTwistJoints = [point for point in pm.ls() if re.match('^%s.*(%s).(twist).*%s.*joint$' % (self.chName, zoneA, side), str(point))]
+        logger.debug('%s %s joints: %s' % (side, zoneA, legJoints))
+        logger.debug('%s %s twist joints: %s' % (side, zoneA, legTwistJoints))
 
         # foot, if it's detected, construct foot system (or hand)
-        footJoints = [point for point in pm.ls() if re.match('^%s.*([fF]oot).*((?!twist).).*%s.*joint$' % (self.chName, side), str(point))]
+        footJoints = [point for point in pm.ls() if re.match('^%s.*(%s).*((?!twist).).*%s.*joint$' % (self.chName, zoneB, side), str(point))]
 
         # group for leg controls
-        legCtrGrp = pm.group(empty=True, name='%s_ik_%s_%s_ctrGrp_root' % (self.chName, zone, side))
+        legCtrGrp = pm.group(empty=True, name='%s_ik_%s_%s_ctrGrp_root' % (self.chName, zoneA, side))
         self.ctrGrp.addChild(legCtrGrp)
 
         # sync legTwistJoints index with leg joints index
@@ -646,17 +651,17 @@ class RigAuto(object):
         # duplicate joints
         for n, i in enumerate(legJoints):
             controllerName = str(i).split('_')[1] if 'end' not in str(i) else 'end'  # if is an end joint, rename end
-            legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0])
-            legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
-            legMainJointList.append(i.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0])
+            legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zoneA, side, controllerName))[0])
+            legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zoneA, side, controllerName))[0])
+            legMainJointList.append(i.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zoneA, side, controllerName))[0])
 
             ### twist Joints ####
             if legTwistSyncJoints[n]:
-                legTwistIni = [i.duplicate(po=True, name='%s_twist0_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0]]
+                legTwistIni = [i.duplicate(po=True, name='%s_twist0_%s_%s_%s_joint' % (self.chName, zoneA, side, controllerName))[0]]
 
                 for j, twstJnt in enumerate(legTwistSyncJoints[n]):
                     # duplicate and construc hierarchy
-                    legTwistIni.append(twstJnt.duplicate(po=True, name='%s_twist%s_%s_%s_%s_joint' % (self.chName, j+1, zone, side, controllerName))[0])
+                    legTwistIni.append(twstJnt.duplicate(po=True, name='%s_twist%s_%s_%s_%s_joint' % (self.chName, j+1, zoneA, side, controllerName))[0])
                     legTwistIni[-2].addChild(legTwistIni[-1])
 
                 legTwistList.append(legTwistIni)  # append to list of tJoints
@@ -664,20 +669,20 @@ class RigAuto(object):
 
                 # parent twist joints
                 if n == 0:
-                    self.ikControllers['spine'][0].addChild(legTwistIni[0])  # first to ctr ik hips
+                    parent.addChild(legTwistIni[0])  # first to ctr ik hips
                 else:
                     legMainJointList[-2].addChild(legTwistIni[0])  # lower twist child of upper leg
 
                 # create twist group orient tracker, if is chaint before foot or hand, track foot or hand
                 if legTwistSyncJoints[n] == legTwistSyncJoints[-2]:  # just before end joint
                     footTwstList = list(legTwistIni)
-                    footTwstZone = zone
+                    footTwstZone = zoneA
                     footTwstCtrName = controllerName
                     footpointCnstr = legMainJointList[-1]
 
                 else:
                     # connect and setup leg Twist Ini chain
-                    ARCore.twistJointsConnect(legTwistIni, legMainJointList[-1], '%s_%s_%s_%s' % (self.chName, controllerName, zone, side))
+                    ARCore.twistJointsConnect(legTwistIni, legMainJointList[-1], '%s_%s_%s_%s' % (self.chName, controllerName, zoneA, side))
 
             NameIdList.append(controllerName)
 
@@ -700,15 +705,15 @@ class RigAuto(object):
             pm.delete(shapeFkTransform)
 
         # ik control
-        legIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
+        legIkControl = self.create_controller('%s_ik_%s_%s_ctr' % (self.chName, zoneA, side), '%sIk_%s' % (zoneA, side), 1, 17)
         # pm.xform(legIkControl, ws=True, m=pm.xform(legJoints[-1], q=True, ws=True, m=True))
         legIkControl.setTranslation(legJoints[-1].getTranslation('world'), 'world')
         legCtrGrp.addChild(legIkControl)  # parent to ctr group
 
         # organitze outliner
-        self.ikControllers['spine'][0].addChild(legFkControllersList[0])
-        self.ikControllers['spine'][0].addChild(legMainJointList[0])
-        self.ikControllers['spine'][0].addChild(legIkJointList[0])
+        parent.addChild(legFkControllersList[0])
+        parent.addChild(legMainJointList[0])
+        parent.addChild(legIkJointList[0])
 
         # save to list
         legIkControllerList.append(legIkControl)
@@ -721,11 +726,11 @@ class RigAuto(object):
         # set preferred angle
         legIkJointList[1].preferredAngleZ.set(-15)
         # ik solver
-        ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zone, side))
-        ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zone, side))
+        ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zoneA, side))
+        ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zoneA, side))
         legIkControl.addChild(ikHandle)
         # create poles
-        legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zone, side), 'pole',2)
+        legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zoneA, side), 'pole',2)
         ARCore.relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
         legCtrGrp.addChild(legPoleController)
         pm.addAttr(legPoleController, ln='polePosition', at='enum', en="world:root:foot", k=True)
@@ -743,11 +748,11 @@ class RigAuto(object):
         # poleVectorAttributes
         poleAttrgrp=[]
         legPoleAnimNodes=[]
-        for attr in ('world', 'root', 'foot'):
-            legPoleGrp = pm.group(empty=True, name= '%s_ik_%s_%s_pole%s_grp' % (self.chName, zone, attr.capitalize(), side))
+        for attr in ('world', 'root', zoneA):
+            legPoleGrp = pm.group(empty=True, name= '%s_ik_%s_%s_pole%s_grp' % (self.chName, zoneA, attr.capitalize(), side))
             poleAttrgrp.append(legPoleGrp)
             pm.xform(legPoleGrp, ws=True, m=pm.xform(legPoleVectorAuto, ws=True, m=True, q=True))
-            legPoleAnim = pm.createNode('animCurveTU', name='%s_ik_%s_%s_pole%s_animNode' % (self.chName, zone, attr.capitalize(), side))
+            legPoleAnim = pm.createNode('animCurveTU', name='%s_ik_%s_%s_pole%s_animNode' % (self.chName, zoneA, attr.capitalize(), side))
             legPoleController.attr('polePosition').connect(legPoleAnim.input)
             legPoleAnimNodes.append(legPoleAnim)
 
@@ -760,8 +765,8 @@ class RigAuto(object):
                 legPoleAnim.addKeyframe(0, 0)
                 legPoleAnim.addKeyframe(1, 1)
                 legPoleAnim.addKeyframe(2, 0)
-                self.fkControllers['spine'][0].addChild(legPoleGrp)
-            elif attr == 'foot':
+                parent.addChild(legPoleGrp)
+            elif attr == zoneA:
                 legPoleAnim.addKeyframe(0, 0)
                 legPoleAnim.addKeyframe(1, 0)
                 legPoleAnim.addKeyframe(2, 1)
@@ -776,7 +781,7 @@ class RigAuto(object):
         # main blending
         # unknown node to store blend info
         # locator shape instanced version
-        ikFkNode = pm.spaceLocator(name='%s_%s_%s_attr' % (self.chName, zone, side))
+        ikFkNode = pm.spaceLocator(name='%s_%s_%s_attr' % (self.chName, zoneA, side))
         ikFkshape = ikFkNode.getShape()
         ikFkshape.visibility.set(0)
         pm.addAttr(ikFkshape, longName='ikFk', shortName='ikFk', minValue=0.0, maxValue=1.0, type='float', defaultValue=1.0, k=True)
@@ -785,7 +790,7 @@ class RigAuto(object):
             for axis in ('X', 'Y', 'Z'):
                 pm.setAttr('%s.%s%s' % (ikFkshape, attr, axis), channelBox=False, keyable=False)
 
-        plusMinusIkFk = pm.createNode('plusMinusAverage', name='%s_ikFk_blending_%s_%s_plusMinusAverage' % (self.chName, zone, side))
+        plusMinusIkFk = pm.createNode('plusMinusAverage', name='%s_ikFk_blending_%s_%s_plusMinusAverage' % (self.chName, zoneA, side))
         ikFkshape.ikFk.connect(plusMinusIkFk.input1D[1])
         plusMinusIkFk.input1D[0].set(1)
         plusMinusIkFk.operation.set(2)
@@ -796,14 +801,14 @@ class RigAuto(object):
             legFkrootsDistances, legMaxiumDistance = ARCore.calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
             #ikFkStretchSetup
             ARCore.ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, ikFkshape, [legIkJointList[0], ikHandle],
-                             legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zone, side), legPoleController)
+                             legMaxiumDistance, legIkJointList[1:], legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zoneA, side), legPoleController)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
         legPointControllers=[]
         for i, joint in enumerate(legMainJointList):
             # attributes
-            orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zone, side))
+            orientConstraint = pm.orientConstraint(legIkJointList[i], legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zoneA, side))
             ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
             ikFkshape.ikFk.connect(legIkJointList[i].visibility)
 
@@ -825,44 +830,45 @@ class RigAuto(object):
                         skinJoint = legJoints[i] if j == 0 else legTwistSyncJoints[i][j-1]
                         nametype = 'main' if j == 0 else 'twist%s' % j
                         # orient and scale
-                        pm.orientConstraint(twistJnt, skinJoint, maintainOffset=False,name='%s_%s_%s_%s_%s_orientConstraint' % (self.chName, nametype, zone, side, NameIdList[i]))
+                        pm.orientConstraint(twistJnt, skinJoint, maintainOffset=False,name='%s_%s_%s_%s_%s_orientConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
                         twistJnt.scaleY.connect(skinJoint.scaleY)
                         twistJnt.scaleZ.connect(skinJoint.scaleZ)
                         # point
                         if i>0 and j == 0:
                             pointController = legPointControllers[-1]
                         elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1) or (i==0 and j==0):
-                            pm.pointConstraint(twistJnt, skinJoint, maintainOffset=False, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zone, side, NameIdList[i]))
+                            pm.pointConstraint(twistJnt, skinJoint, maintainOffset=False, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
                             continue
                         else:
-                            pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zone, side, NameIdList[i]), 'twistPoint_%s' % side, 1, pointColor)
+                            pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zoneA, side, NameIdList[i]), 'twistPoint_%s' % side, 1, pointColor)
                             pointController, rootPointController, pointConstraint = ARCore.jointPointToController([twistJnt], pointController)
                             joint.addChild(rootPointController[0])
                             pointController = pointController[0]
                             legPointControllers.append(pointController)  # save to list
 
-                        pm.pointConstraint(pointController, skinJoint, maintainOffset=True, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zone, side, NameIdList[i]))
+                        pm.pointConstraint(pointController, skinJoint, maintainOffset=True, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
 
             else:
                 # connect to deform skeleton
-                pm.orientConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
-                pm.pointConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zone, side))
+                pm.orientConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zoneA, side))
+                pm.pointConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zoneA, side))
 
         # ik blending controller attr
         ikFkshape.ikFk.connect(legPoleController.visibility)
         ikFkshape.ikFk.connect(legIkControl.visibility)
 
         # function for create foots, Review: maybe here another to create hands
-        def foot_auto(zone='foot'):
+        def foot_auto():
             """
             # TODO: organitze and optimize this Func
+            # TODO: zone or zoneB?
             auto build a ik fk foot
             Args:
                 side: left or right
                 zone: foot
             """
             fkColor = 14 if side =='left' else 29
-            toesJoints = [point for point in pm.ls() if re.match('^%s.*([tT]oe).(?!_end)((?!twist).).*%s.*joint$' % (self.chName, side), str(point))]
+            toesJoints = [point for point in pm.ls() if re.match('^%s.*(%s).(?!_end)((?!twist).).*%s.*joint$' % (self.chName, zoneC, side), str(point))]
             footTotalJoints = footJoints + toesJoints  # review: this var
             logger.debug('foot joints: %s' % footJoints)
             logger.debug('toes joints: %s' % toesJoints)
@@ -884,8 +890,8 @@ class RigAuto(object):
             for joint in footJoints:
                 controllerName = str(joint).split('_')[1]
                 logger.debug('foot controller name: %s' % controllerName)
-                footFkCtr = joint.duplicate(po=True, name='%s_%s_%s_%s_fk_ctr' % (self.chName, controllerName, zone, side))[0]
-                footMain = joint.duplicate(po=True, name='%s_%s_%s_%s_main_joint' % (self.chName, controllerName, zone, side))[0]
+                footFkCtr = joint.duplicate(po=True, name='%s_%s_%s_%s_fk_ctr' % (self.chName, controllerName, zoneB, side))[0]
+                footMain = joint.duplicate(po=True, name='%s_%s_%s_%s_main_joint' % (self.chName, controllerName, zoneB, side))[0]
 
                 # get transformMatrix and orient new controller TODO: function
                 matrix = pm.xform(footFkCtr, ws=True, q=True, m=True)
@@ -931,13 +937,13 @@ class RigAuto(object):
                 for joint in toe:
                     controllerName = str(joint).split('_')[1]
                     logger.debug('foot controller name: %s' % controllerName)
-                    toeFkCtr = joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
-                    toeMainJnt = joint.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zone, side, controllerName))[0]
-                    toeIkCtr = joint.duplicate(po=True, name='%s_ik_%s_%s_%s_ctr' % (self.chName, zone, side, controllerName))[0]
+                    toeFkCtr = joint.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zoneB, side, controllerName))[0]
+                    toeMainJnt = joint.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zoneB, side, controllerName))[0]
+                    toeIkCtr = joint.duplicate(po=True, name='%s_ik_%s_%s_%s_ctr' % (self.chName, zoneB, side, controllerName))[0]
 
                     # get transformMatrix and orient new controller # TODO: function
                     matrix = pm.xform(toeFkCtr, ws=True, q=True, m=True)
-                    matrix = ARCore.orientToPlane(matrix, 'zx')  # adjusting orient to plane zx
+                    matrix = ARCore.orientToPlane(matrix, planeAlign)  # adjusting orient to plane zx
 
                     # apply transforms constrollers
                     pm.xform(toeFkCtr, ws=True, m=matrix)
@@ -983,10 +989,12 @@ class RigAuto(object):
 
             # ik foot ctr TODO: simplify this section
             # TODO: create the rest of the controllers here too
-            footIkCtr = self.create_controller('%s_ik_%s_%s_foot_ctr' % (self.chName, zone, side), '%sIk_%s' % (zone, side), 1, 17)
+            footIkCtr = self.create_controller('%s_ik_%s_%s_foot_ctr' % (self.chName, zoneB, side), '%sIk_%s' % (zoneB, side), 1, 17)
             legCtrGrp.addChild(footIkCtr)
             footIkControllerList.append(footIkCtr)  # append joint to list
-            footIkAttrTypes = ['heel', 'tilt', 'toes', 'ball', 'footRoll']
+
+            #--start rest points--
+            footIkAttrTypes = ['heel', 'tilt', 'toes', 'ball', 'footRoll']  # list with hierarchy order restPointsVariable, names complete
             # add auto attributes
             for attr in footIkAttrTypes:
                 pm.addAttr(footIkCtr, longName=attr, shortName=attr, type='float', defaultValue=0.0, k=True)
@@ -999,12 +1007,12 @@ class RigAuto(object):
             for ctrType in footIkAttrTypes[:-1]:
                 if ctrType == 'tilt':
                     for inOut in ('In', 'Out'):
-                        footIkCtrWalk = self.create_controller('%s_ik_%s_%s_foot%s%s_ctr' % (self.chName, zone, side, ctrType.capitalize(), inOut),'foot%s%sIk_%s' % (ctrType.capitalize(),inOut, side), 1, 17)
+                        footIkCtrWalk = self.create_controller('%s_ik_%s_%s_foot%s%s_ctr' % (self.chName, zoneB, side, ctrType.capitalize(), inOut),'foot%s%sIk_%s' % (ctrType.capitalize(),inOut, side), 1, 17)
                         footIkControllerList[-1].addChild(footIkCtrWalk)
                         footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
                         footIkControllerList.append(footIkCtrWalk)
                 else:
-                    footIkCtrWalk = self.create_controller('%s_ik_%s_%s_foot%s_ctr' % (self.chName, zone, side, ctrType.capitalize()), 'foot%sIk_%s' % (ctrType.capitalize(), side), 1, 17)
+                    footIkCtrWalk = self.create_controller('%s_ik_%s_%s_foot%s_ctr' % (self.chName, zoneB, side, ctrType.capitalize()), 'foot%sIk_%s' % (ctrType.capitalize(), side), 1, 17)
                     footIkControllerList[-1].addChild(footIkCtrWalk)
                     footIkCtr.attr('showControls').connect(footIkCtrWalk.getShape().visibility)
                     footFootRollCtr.append(footIkCtrWalk)  # save footRoll controllers
@@ -1024,8 +1032,9 @@ class RigAuto(object):
                                                 firstfootFkMatrix[8],firstfootFkMatrix[9],firstfootFkMatrix[10],firstfootFkMatrix[11],
                                                 middleToeCtrMatrix[12], middleToeCtrMatrix[13], middleToeCtrMatrix[14], middleToeCtrMatrix[15]]
             pm.xform(footBallIkCtr, ws=True, m=footBallIkMatrix)
+            # --end rest points--
 
-            logger.debug('legIkControl childs: %s' % legIkControl.listRelatives(c=True, type='transform'))
+
             for i in legIkControl.listRelatives(c=True, type='transform'):  # traspase childs from previous leg controller
                 footBallIkCtr.addChild(i)
 
@@ -1039,9 +1048,9 @@ class RigAuto(object):
             legIkControllerList.remove(legIkControl)
 
             # toes general Controller ik Fk review: no side review: ik ctrllers  simplyfy with for
-            toeFkGeneralController = self.create_controller('%s_fk_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            toeFkGeneralController = self.create_controller('%s_fk_%s_%s_toeGeneral_ctr' % (self.chName, zoneB, side), 'toesFk', 1, fkColor)
             pm.xform(toeFkGeneralController, ws=True, m=middleToeCtrMatrix)  # align to middle individual toe review
-            toeIkGeneralController = self.create_controller('%s_ik_%s_%s_toeGeneral_ctr' % (self.chName, zone, side), 'toesFk', 1, fkColor)
+            toeIkGeneralController = self.create_controller('%s_ik_%s_%s_toeGeneral_ctr' % (self.chName, zoneB, side), 'toesFk', 1, fkColor)
             pm.xform(toeIkGeneralController, ws=True, m=middleToeCtrMatrix)
             # parent and store to lists
             footFkControllerList[-1].addChild(toeFkGeneralController)
@@ -1078,7 +1087,7 @@ class RigAuto(object):
                             toesGeneralCtrIkOrFk.attr('rotate%s' % axis).connect(iAuto.attr('rotate%s' % axis))
                             # set limits for toes ctr translate
                             for minMax in ('min', 'max'):
-                                # limit value
+                                # limit value  # todo: no limits
                                 value = -.7 if minMax == 'min' else .7
                                 toesCntrLst[i].attr('%sTrans%sLimitEnable' % (minMax, axis)).set(True)
                                 toesCntrLst[i].attr('%sTrans%sLimit' % (minMax, axis)).set(value)
@@ -1100,7 +1109,7 @@ class RigAuto(object):
                     autoGrp.attr('maxRotZLimitEnable').set(True)
                     autoGrp.attr('maxRotZLimit').set(0)
 
-            # footRollAuto
+            # footRollAuto __ rest points__
             for autoGrp in footRollAuto:
                 logger.debug('footRoolAutoGrp: %s, %s' % (autoGrp, type(autoGrp)))
                 animNode = pm.createNode('animCurveTU', name='%s_animNode' % autoGrp)
@@ -1139,15 +1148,15 @@ class RigAuto(object):
                                              outTangentType='clamped')
                     animNode.setPostInfinityType('linear')
                     animNode.setPreInfinityType('linear')
+            # END footRollAuto __ rest points__
 
-            logger.debug('footIkControllerList %s' % footIkControllerList)
             ## BLEND ##
             # orient constraint main to ik or fk foot
             for i, mainJoint in enumerate(footMainJointsList):
                 controllerName = footControllerNameList[i]
                 if i == 0:
                     # connect ik fk blend system, in a leg system only have one ik controller
-                    orientConstraint = pm.orientConstraint(footIkControllerList[-1], footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zone, side))
+                    orientConstraint = pm.orientConstraint(footIkControllerList[-1], footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zoneB, side))
                     ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(footIkControllerList[-1])))  # shape with bleeding attribute
                     ikFkshape.ikFk.connect(footIkControllerList[i].visibility)  # all foot chain visibility
 
@@ -1161,19 +1170,19 @@ class RigAuto(object):
                     plusMinusIkFk.output1D.connect(footFkControllerList[i].getShape().visibility)
 
                 else:
-                    orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zone, side))
+                    orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zoneB, side))
 
                 ARCore.lockAndHideAttr(footFkControllerList[i], True, False, False)
                 pm.setAttr('%s.radi' % footFkControllerList[i], channelBox=False, keyable=False)
 
                 # connect to deform skeleton
-                orientDeformConstraint = pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zone, side))
+                orientDeformConstraint = pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zoneB, side))
 
             ## TOES ##
             # main ik fk toes
             for i, mainJoint in enumerate(toesMainJointsList):
                 controllerName = toeControllerNameList[i]
-                orientConstraint = pm.orientConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zone, side))
+                orientConstraint = pm.orientConstraint(toesIkControllerList[i], toesFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zoneB, side))
 
                 ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(toesIkControllerList[i])))  # shape with bleeding attribute
                 ikFkshape.ikFk.connect(toesIkControllerList[i].visibility)  # all foot chain visibility
@@ -1197,11 +1206,12 @@ class RigAuto(object):
         else:
             # parent shape
             legIkControl.addChild(ikFkshape, r=True, s=True)
+
         pm.delete(ikFkNode)
 
         # save Data
         # todo: save quaternions too if necessary
-        zoneSide = '%s_%s' % (zone, side)
+        zoneSide = '%s_%s' % (zoneA, side)
         self.joints[zoneSide] = legJoints
         self.ikControllers[zoneSide] = legIkControllerList
         self.fkControllers[zoneSide] = legFkControllersList

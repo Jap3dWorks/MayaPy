@@ -16,8 +16,8 @@ def spine_head_leg_akona(name='akona', stretch=True):
     akonaRig = autoRig.RigAuto(chName=name, path='D:\_docs\_Animum\Akona')
     akonaRig.spine_auto()
     akonaRig.neckHead_auto()
-    akonaRig.leg_auto('left', 'leg', stretch)
-    akonaRig.leg_auto('right', 'leg', stretch)
+    akonaRig.leg_auto('left', ('leg', 'foot', 'toe'), True, True, 'zx', akonaRig.ikControllers['spine'][0])
+    akonaRig.leg_auto('right', ('leg', 'foot', 'toe'), True, True, 'zx', akonaRig.ikControllers['spine'][0])
     #akonaRig.arm_auto('left')
 
     cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_left_joint', maintainOffset=True)
