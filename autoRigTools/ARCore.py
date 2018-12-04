@@ -631,14 +631,18 @@ def snapCurveToPoints(points, curve, iterations=4, precision=0.05):
 
     mfnNurbsCurve.updateCurve()
 
-def orientToPlane(matrix, plane='zx'):
+def orientToPlane(matrix, plane=None):
     """
     Conserve the general orient of a matrixTransform, but aligned to a plane
     Args:
         controller(pm.transform): transform matrix
         plane(string): zx, xy, yz  lower case, first vector is the prefered vector
     """
-    if len(plane) > 2:
+    if not plane:
+        logger.info('no plane')
+        return matrix
+
+    elif len(plane) > 2:
         logger.info('insert a valid plane')
         return matrix
 

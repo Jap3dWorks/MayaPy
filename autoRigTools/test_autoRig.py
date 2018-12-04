@@ -10,23 +10,28 @@ def model_import():
     # cmds.setAttr('akona_model_grp.visibility', True)
 
 
-def spine_head_leg_akona(name='akona', stretch=True):
+def spine_head_leg_akona(name='akona'):
 
     reload(autoRig)
     akonaRig = autoRig.RigAuto(chName=name, path='D:\_docs\_Animum\Akona')
     akonaRig.spine_auto()
     akonaRig.neckHead_auto()
-    akonaRig.leg_auto('left', ('leg', 'foot', 'toe'), True, True, 'zx', akonaRig.ikControllers['spine'][0])
-    akonaRig.leg_auto('right', ('leg', 'foot', 'toe'), True, True, 'zx', akonaRig.ikControllers['spine'][0])
+
+    # legs
+    akonaRig.leg_auto('left', akonaRig.ikControllers['spine'][0], 'leg', True)
+    akonaRig.foot_auto('left', ('leg', 'foot', 'toe'), 'zx', True, True)
+
+    akonaRig.leg_auto('right', akonaRig.ikControllers['spine'][0], 'leg', True)
+    akonaRig.foot_auto('right', ('leg', 'foot', 'toe'), 'zx', True, True)
     #akonaRig.arm_auto('left')
 
+    # hands
+    akonaRig.leg_auto('left', akonaRig.ikControllers['spine'][-1], 'arm', True)
+    akonaRig.foot_auto('left', ('arm', 'hand', 'finger'),None, False, False)
+
+    akonaRig.leg_auto('right', akonaRig.ikControllers['spine'][-1], 'arm', True)
+    akonaRig.foot_auto('right', ('arm', 'hand', 'finger'),None, False, False)
+
+    #____#
     cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_left_joint', maintainOffset=True)
     cmds.parentConstraint('akona_ik_spine_chest_1_ctr', 'akona_clavicle_right_joint', maintainOffset=True)
-
-    return
-    # test twistJoints
-    selection = [i for i in cmds.ls() if re.match('^%s_twist._.*_.*_.*_joint$' % name, i)]
-    for sel in selection:
-        cube = cmds.polyCube(w=2, h=10, d=10)[0]
-        cmds.parent(cube, sel)
-        cmds.xform(cube, os=True, t=(0,0,0), ro=(0,0,0))
