@@ -13,6 +13,7 @@ logging.basicConfig()
 logger = logging.getLogger('autoRig:')
 logger.setLevel(logging.DEBUG)
 
+# TODO: main Joints, naming pe. akona_foreArm_main. similar a joint name
 # TODO: Name convention revision
 # name convention:
 # name_ctrName_zone_side_function_type:
@@ -639,7 +640,7 @@ class RigAuto(object):
         self.legIkControllerList = []
         self.legMainJointList = []
         legTwistList = []
-        legIkJointList = []
+        self.legIkJointList = []
 
         NameIdList = []  # store idNames. p.e upperLeg, lowerLeg
 
@@ -647,7 +648,7 @@ class RigAuto(object):
         for n, i in enumerate(legJoints):
             controllerName = str(i).split('_')[1] if 'end' not in str(i) else 'end'  # if is an end joint, rename end
             self.legFkControllersList.append(i.duplicate(po=True, name='%s_fk_%s_%s_%s_ctr' % (self.chName, zoneA, side, controllerName))[0])
-            legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zoneA, side, controllerName))[0])
+            self.legIkJointList.append(i.duplicate(po=True, name='%s_ik_%s_%s_%s_joint' % (self.chName, zoneA, side, controllerName))[0])
             self.legMainJointList.append(i.duplicate(po=True, name='%s_main_%s_%s_%s_joint' % (self.chName, zoneA, side, controllerName))[0])
 
             ### twist Joints ####
@@ -681,13 +682,13 @@ class RigAuto(object):
 
             NameIdList.append(controllerName)
 
-        logger.debug('leg IK joints: %s' % legIkJointList)
+        logger.debug('leg IK joints: %s' % self.legIkJointList)
 
         # reconstruct hierarchy
         # create Fk control shapes
         for i, fkCtr in enumerate(self.legFkControllersList[:-1]):  # last controller does not has shape
             # ik hierarchy
-            legIkJointList[i].addChild(legIkJointList[i + 1])
+            self.legIkJointList[i].addChild(self.legIkJointList[i + 1])
             # main hierarchy
             self.legMainJointList[i].addChild(self.legMainJointList[i+1])
 
@@ -708,25 +709,25 @@ class RigAuto(object):
         # organitze outliner
         parent.addChild(self.legFkControllersList[0])
         parent.addChild(self.legMainJointList[0])
-        parent.addChild(legIkJointList[0])
+        parent.addChild(self.legIkJointList[0])
 
         # save to list
         self.legIkControllerList.append(self.legIkControl)
         ARCore.createRoots(self.legIkControllerList)
 
         # fkRoots
-        legFkCtrRoots = ARCore.createRoots(self.legFkControllersList)
+        self.legFkCtrRoots = ARCore.createRoots(self.legFkControllersList)
         ARCore.createRoots(self.legFkControllersList, 'auto')
 
         # set preferred angle
-        legIkJointList[1].preferredAngleZ.set(-15)
+        self.legIkJointList[1].preferredAngleZ.set(-15)
         # ik solver
-        ikHandle, ikEffector = pm.ikHandle(startJoint=legIkJointList[0], endEffector=legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zoneA, side))
+        ikHandle, ikEffector = pm.ikHandle(startJoint=self.legIkJointList[0], endEffector=self.legIkJointList[-1], solver='ikRPsolver', name='%s_ik_%s_%s_handle' % (self.chName, zoneA, side))
         ikEffector.rename('%s_ik_%s_%s_effector' % (self.chName, zoneA, side))
         self.legIkControl.addChild(ikHandle)
         # create poles
         legPoleController = self.create_controller('%s_ik_%s_%s_pole_ctr' % (self.chName, zoneA, side), 'pole',2)
-        ARCore.relocatePole(legPoleController, legIkJointList, 35)  # relocate pole Vector
+        ARCore.relocatePole(legPoleController, self.legIkJointList, 35)  # relocate pole Vector
         self.legCtrGrp.addChild(legPoleController)
         pm.addAttr(legPoleController, ln='polePosition', at='enum', en="world:root:foot", k=True)
         # save poleVector
@@ -793,19 +794,19 @@ class RigAuto(object):
         if stretch:
             ###Strech###
             # fk strech
-            legFkrootsDistances, legMaxiumDistance = ARCore.calcDistances(legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
+            legFkrootsDistances, legMaxiumDistance = ARCore.calcDistances(self.legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
             #ikFkStretchSetup
-            ARCore.ikFkStretchSetup(legFkCtrRoots[1:], legFkrootsDistances, self.ikFkshape, [legIkJointList[0], ikHandle],
-                             legMaxiumDistance, legIkJointList[1:], self.legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zoneA, side), legPoleController)
+            ARCore.ikFkStretchSetup(self.legFkCtrRoots[1:], legFkrootsDistances, self.ikFkshape, [self.legIkJointList[0], ikHandle],
+                             legMaxiumDistance, self.legIkJointList[1:], self.legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zoneA, side), legPoleController)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
         legPointControllers=[]
         for i, joint in enumerate(self.legMainJointList):
             # attributes
-            orientConstraint = pm.orientConstraint(legIkJointList[i], self.legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zoneA, side))
-            self.ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(legIkJointList[i])))
-            self.ikFkshape.ikFk.connect(legIkJointList[i].visibility)
+            orientConstraint = pm.orientConstraint(self.legIkJointList[i], self.legFkControllersList[i], joint, maintainOffset=False, name='%s_main_blending_%s_%s_orientConstraint' % (self.chName, zoneA, side))
+            self.ikFkshape.ikFk.connect(orientConstraint.attr('%sW0' % str(self.legIkJointList[i])))
+            self.ikFkshape.ikFk.connect(self.legIkJointList[i].visibility)
 
             # parent shape
             self.legFkControllersList[i].addChild(self.ikFkshape, s=True, add=True)
@@ -835,7 +836,7 @@ class RigAuto(object):
                             pm.pointConstraint(twistJnt, skinJoint, maintainOffset=False, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
                             continue
                         else:
-                            pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zoneA, side, NameIdList[i]), 'twistPoint_%s' % side, 1, pointColor)
+                            pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zoneA, side, NameIdList[i]), '%sTwistPoint_%s' % (zoneA, side), 1, pointColor)
                             pointController, rootPointController, pointConstraint = ARCore.jointPointToController([twistJnt], pointController)
                             joint.addChild(rootPointController[0])
                             pointController = pointController[0]
@@ -1275,7 +1276,7 @@ class RigAuto(object):
                                       self.footpointCnstr)
 
         # create finger Fk and ik ctr
-        # last hand fkCtr, easiest fot later access
+        # last hand fkCtr, easiest access later
         fingerMainParents = []
         for i, toe in enumerate(fingerJointsArr):
             fingerMainChain = []
@@ -1364,13 +1365,67 @@ class RigAuto(object):
                     for zeroJoint in fingerZeroJoints:
                         if controllerName[:-1] in str(zeroJoint):
                             # todo: func aim creator, with upper vector
-                            pm.aimConstraint(mainJoint, zeroJoint)
+                            pm.aimConstraint(mainJoint, zeroJoint, aimVector=(zeroJoint.translateX.get(),0,0), worldUpType='objectrotation', worldUpObject=str(handMainJointsList[-1]))
 
 
             return handIkControllerList, handFkControllerList + fingerMainJointsList
 
-    def clavicle_auto(self):
-        pass
+
+    def clavicle_auto(self, side,  zone='clavicle', *funcs):
+        # TODO, detect parent from las ikFk chain
+        fkColor = 14 if side == 'left' else 29
+        clavicleJoints = [point for point in pm.ls() if re.match('^%s.*(%s).(?!_end)(?!0)(?!twist).*%s.*joint$' % (self.chName, zone, side), str(point))]
+        clUpperArmJoint = clavicleJoints[-1].getChildren()[0]
+
+        parent = self.legMainJointList[0].firstParent()  # get parent of the system
+
+        # store clavicle main joints here
+        clavicleMainList = []
+
+        for joint in clavicleJoints:
+            controllerName = str(joint).split('_')[1]
+            # create controller shape
+            clavicleController = self.create_controller(str(joint).replace('joint', 'main'), '%sFk_%s' % (controllerName, side), 1, fkColor)
+            pm.xform(clavicleController, ws=True, m=pm.xform(joint, q=True, ws=True, m=True))
+            clavicleMainList.append(clavicleController)
+
+        # hierarchy
+        parent.addChild(clavicleMainList[0])
+
+        # swing controller
+        clavicleSwingCrt = self.create_controller('%s_%s_%s_swing_fk_ctr' % (self.chName, zone, side), 'swingFk_%s' % side, 1, fkColor)
+        pm.xform(clavicleSwingCrt, ws=True, m=pm.xform(clUpperArmJoint, q=True, ws=True, m=True))  # set transforms
+        clavicleMainList[-1].addChild(clavicleSwingCrt)
+
+        # parent ikFk chains to swing
+        for ctr in (self.legMainJointList[0], self.legFkCtrRoots[0], self.legIkJointList[0]):
+            clavicleSwingCrt.addChild(ctr)
+
+        # create roots
+        ARCore.createRoots(clavicleMainList)
+        clavicleAutoGrpList = ARCore.createRoots(clavicleMainList, 'auto')
+        ARCore.createRoots([clavicleSwingCrt])
+
+        # auto clavicle
+        autoClavicleName = 'autoClavicleInfluence'
+        pm.addAttr(self.ikFkshape, longName=autoClavicleName, shortName=autoClavicleName, minValue=0.0, maxValue=1.0, type='float', defaultValue=0.5, k=True)
+        # nodes drive rotation by influence
+        clavicleMultiplyNode = pm.createNode('multiplyDivide', name='%s_%s_%s_multiply' % (self.chName, zone, side))
+        # todo: expose autoClavicle
+        for axis in ('Y', 'Z'):
+            # multiply by influence
+            self.ikFkshape.attr(autoClavicleName).connect(clavicleMultiplyNode.attr('input1%s' % axis))
+            self.legFkControllersList[0].attr('rotate%s' % axis).connect(clavicleMultiplyNode.attr('input2%s' % axis))
+            # connect to auto clavicle
+            clavicleMultiplyNode.attr('output%s' % axis).connect(clavicleAutoGrpList[0].attr('rotate%s' % axis))
+
+
+        for i, joint in enumerate(clavicleJoints):
+            pass
+            # connect to deform system
+            pm.pointConstraint(clavicleMainList[i], joint, maintainOffset=False)
+            pm.orientConstraint(clavicleMainList[i], joint, maintainOffset=True)
+
 
     def create_controller(self, name, controllerType, s=1.0, colorIndex=4):
         """

@@ -679,3 +679,7 @@ def orientToPlane(matrix, plane=None):
                 vectors[axisList[2]].x, vectors[axisList[2]].y, vectors[axisList[2]].z, matrix[11], matrix[12], matrix[13], matrix[14], matrix[15]]
 
     return returnMatrix
+
+
+def aimUpVector(driver, driven, axis='y', space='object'):
+    pass
