@@ -196,7 +196,7 @@ def attrBlending(ikNode, fkNode, blendAttr, nameInfo, *args):
 
     return plusIkFkBlend
 
-def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, nameInfo, poleVector=None):
+def stretchIkFkSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ikJoints, mainJoints, twsitMainJoints, nameInfo, main, poleVector=None):
     """
     create ik and fk stretch system with twistJoints, stretching by translate
     all the lists must be of the same len()
@@ -211,6 +211,7 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         mainJoints(list(pm.Joint)): MainJoints to connect the stretch (no the first joint) 2
         twsitMainJoints(list(list(pm.joints))) : lists with twist joints
         char, zone, side(str): name of character. zone os the system. side of the system
+        main(PyNode): main controller
     TODO: less nodes, new node when all connections are used
     """
     # fk system
@@ -249,6 +250,11 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
     distanceBetweenPoleList=[]
     # distance between objetcs, and connect matrix
     distanceBetween = pm.createNode('distanceBetween', name='%s_ikStretch_distanceBetween' % nameInfo)
+    scaleDistance = pm.createNode('multiplyDivide', name='%s_ikStretchScale_multiplyDivide' % nameInfo)
+    scaleDistance.operation.set(2)  # divide
+    distanceBetween.distance.connect(scaleDistance.input1X)
+    main.scaleX.connect(scaleDistance.input2X)
+
     for i in range(len(ikObjList)):
         # use helpers to avoid cycle checks
         positionTrackIk = pm.group(empty=True, name='%s_ikStretch_track%s__grp' % (nameInfo, i+1))
@@ -260,28 +266,32 @@ def ikFkStretchSetup(fkObjList, fkDistances, nodeAttr, ikObjList, ikDistance, ik
         # for knee snap, extract distances from each point to pole vector
         if poleVector:
             distanceBetweenPole = pm.createNode('distanceBetween', name='%s_ikStretch_distancePole%s_distanceBetween' % (nameInfo, i+1))
+            distancePoleScale = pm.createNode('multiplyDivide', name='%s_ikStretch_distanceScalePole%s_multiplyDivide' % (nameInfo, i+1))
+            distancePoleScale.operation.set(2)  # divide
             positionTrackIk.worldMatrix[0].connect(distanceBetweenPole.inMatrix1)
             poleVector.worldMatrix[0].connect(distanceBetweenPole.inMatrix2)
+            distanceBetweenPole.distance.connect(distancePoleScale.input1X)
+            main.scaleX.connect(distancePoleScale.input2X)
             if ikJoints[i].translateX.get() < 0:
                 invertValue = pm.createNode('multiplyDivide', name='%s_ikStretch_invertValue_multiplyDivide' % nameInfo)
                 invertValue.input2X.set(-1)
-                distanceBetweenPole.distance.connect(invertValue.input1X)
+                distancePoleScale.outputX.connect(invertValue.input1X)
 
-                distanceBetweenPole = invertValue
+                distancePoleScale = invertValue
 
-            distanceBetweenPoleList.append(distanceBetweenPole)
+            distanceBetweenPoleList.append(distancePoleScale)
 
     # conditional node
     conditionalScaleFactor = pm.createNode('condition', name='%s_ikStretch_stretchValue_conditional' % nameInfo)  # review stretchValue
     conditionalScaleFactor.operation.set(2)
     conditionalScaleFactor.colorIfFalseR.set(1)
     # connect distance to conditional
-    distanceBetween.distance.connect(conditionalScaleFactor.firstTerm)
+    scaleDistance.outputX.connect(conditionalScaleFactor.firstTerm)
     conditionalScaleFactor.secondTerm.set(abs(ikDistance))
     # scaleFactor
     multiplydivide = pm.createNode('multiplyDivide', name='%s_ikStretch_multiplyDivide' % nameInfo)
     multiplydivide.operation.set(2)  # set to divide
-    distanceBetween.distance.connect(multiplydivide.input1X)
+    scaleDistance.outputX.connect(multiplydivide.input1X)
     multiplydivide.input2X.set(abs(ikDistance))
     # connecto to conditional
     multiplydivide.outputX.connect(conditionalScaleFactor.colorIfTrueR)
@@ -680,6 +690,63 @@ def orientToPlane(matrix, plane=None):
 
     return returnMatrix
 
+def stretchCurveVolume(curve, joints, nameInfo, main=None):
+    curveInfo = pm.createNode('curveInfo', name='%s_curveInfo' % nameInfo)
+    scaleCurveInfo = pm.createNode('multiplyDivide', name='%s_scaleCurve_curveInfo' % nameInfo)
+    scaleCurveInfo.operation.set(2)  # divide
+    # connect to scale compensate
+    curveInfo.arcLength.connect(scaleCurveInfo.input1X)
+    main.scaleX.connect(scaleCurveInfo.input2X)
+
+    curve.worldSpace[0].connect(curveInfo.inputCurve)
+    spineCurveLength = curve.length()
+
+    # influence
+    # create anim curve to control scale influence
+    # maybe this is better to do with a curveAttr
+    scaleInfluenceCurve = pm.createNode('animCurveTU', name='%s_stretch_animCurve' % nameInfo)
+    scaleInfluenceCurve.addKeyframe(0, 0.0)
+    scaleInfluenceCurve.addKeyframe(len(joints) // 2, 1.0)
+    scaleInfluenceCurve.addKeyframe(len(joints) - 1, 0.0)
+
+    for n, joint in enumerate(joints):
+        jointNameSplit = str(joint).split('_')[1]
+
+        multiplyDivide = pm.createNode('multiplyDivide', name='%s_%s_stretch_multiplyDivide' % (nameInfo, jointNameSplit))
+        multiplyDivide.operation.set(2)  # divide
+        multiplyDivide.input1X.set(spineCurveLength)
+        scaleCurveInfo.outputX.connect(multiplyDivide.input2X)
+        plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_plusMinusAverage' % nameInfo)
+        multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
+        plusMinusAverage.input1D[1].set(-1)
+        multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_%s_stretch_multiplyDivide' % (nameInfo, jointNameSplit))
+        plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
+        # frame cache
+        frameCache = pm.createNode('frameCache', name='%s_%s_stretch_frameCache' % (nameInfo, jointNameSplit))
+        scaleInfluenceCurve.output.connect(frameCache.stream)
+        frameCache.varyTime.set(n)
+        frameCache.varying.connect(multiplyDivideInfluence.input2X)
+        # plus 1
+        plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_%s_stretch_plusMinusAverage' % (nameInfo, jointNameSplit))
+        multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
+        plusMinusAverageToJoint.input1D[1].set(1)
+
+        # connect to joint
+        plusMinusAverageToJoint.output1D.connect(joint.scaleY)
+        plusMinusAverageToJoint.output1D.connect(joint.scaleZ)
 
 def aimUpVector(driver, driven, axis='y', space='object'):
     pass
+
+def connectAttributes(driver, driven, attributes, axis):
+    """
+    connect the attributes of the given objects
+    Args:
+        driver: source of the connection
+        driven: destiny of the connection
+        attributes: attributes to connect p.e scale, translate
+        axis: axis of the attribute p.e X, Y, Z
+    """
+    for attribute in attributes:
+        for axi in axis:
+            driver.attr('%s%s' % (attribute, axi)).connect(driven.attr('%s%s' % (attribute, axi)))

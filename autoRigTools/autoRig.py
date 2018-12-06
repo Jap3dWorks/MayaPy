@@ -50,8 +50,20 @@ class RigAuto(object):
             self.ctrGrp = pm.group(name='%s_ctr_grp' % self.chName, empty=True)
             pm.PyNode('%s_rig_grp' % self.chName).addChild(self.ctrGrp)
 
+        # create Main ctr
+        try:
+            self.mainCtr = pm.PyNode('%s_main_grp' % self.chName)
+            self.ctrGrp.addChild(self.mainCtr)
+        except:
+            self.mainCtr = self.create_controller('%s_main_grp' % self.chName, 'main', 1, 18)
+            self.ctrGrp.addChild(self.mainCtr)
+        # connect main scale to grp joints
+        ARCore.connectAttributes(self.mainCtr, pm.PyNode('%s_joints_grp' % self.chName), ['scale'], ['X', 'Y', 'Z'])
+
+        # I think i don't need this
         self.methodNames = [x[0] for x in inspect.getmembers(self, predicate=inspect.ismethod) if 'auto' in x[0]]
         print (self.methodNames)
+
 
     # method decorator, check if already exist the rig part,
     # and create the necessary attr circuity (nodes with controllers connections)
@@ -197,7 +209,7 @@ class RigAuto(object):
 
                 # add 3th ik controller to hierarchy too
                 spineFKControllerList[1].addChild(spineIKControllerList[2])
-                self.ctrGrp.addChild(spineFKControllerList[0])
+                self.mainCtr.addChild(spineFKControllerList[0])
 
         # create roots grp
         ARCore.createRoots(spineFKControllerList)
@@ -282,18 +294,6 @@ class RigAuto(object):
             pointContraint.attr('%sW0' % str(ObjectUpVectorList[-1])).set(pointConstraintFactor)
             pointContraint.attr('%sW1' % str(ObjectUpVectorList[0])).set(1-pointConstraintFactor)
 
-        # stretch squash spine
-        # curveInfo and connect spineCurve
-        curveInfo = pm.createNode('curveInfo', name='%s_stretchSquash_%s_1_curveInfo' % (self.chName, zone))
-        spineCurve.worldSpace[0].connect(curveInfo.inputCurve)
-        spineCurveLength = spineCurve.length()
-
-        # create anim curve to control scale influence
-        # maybe this is better to do with a curveAttr
-        scaleInfluenceCurve = pm.createNode('animCurveTU', name='%s_stretchSquash_%s_1_animCurve' % (self.chName, zone))
-        scaleInfluenceCurve.addKeyframe(0, 0.0)
-        scaleInfluenceCurve.addKeyframe(len(spineJoints)//2, 1.0)
-        scaleInfluenceCurve.addKeyframe(len(spineJoints)-1, 0.0)
         for n, joint in enumerate(spineJoints):
             # for each joint, create a multiply divide node
             # formula for scale: 1+(factorScale - 1)*influence
@@ -316,31 +316,10 @@ class RigAuto(object):
                                     name='%s_drv_%s_%s_1_parentConstraint' % (
                                     self.chName, zone, jointNameSplit))
 
-            # TODO: rename nodes
-            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
-            multiplyDivide.operation.set(2)
-            multiplyDivide.input1X.set(spineCurveLength)
-            curveInfo.arcLength.connect(multiplyDivide.input2X)
-            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_1_plusMinusAverage' % (self.chName, zone, jointNameSplit))
-            multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
-            plusMinusAverage.input1D[1].set(-1)
-            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_2_multiplyDivide' % (self.chName, zone, jointNameSplit))
-            plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
-            # frame cache
-            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_frameCache' % (self.chName, zone, jointNameSplit))
-            scaleInfluenceCurve.output.connect(frameCache.stream)
-            frameCache.varyTime.set(n)
-            frameCache.varying.connect(multiplyDivideInfluence.input2X)
-            # plus 1
-            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_2_plusMinusAverage' % (self.chName, zone, jointNameSplit))
-            multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
-            plusMinusAverageToJoint.input1D[1].set(1)
+        # stretch
+        ARCore.stretchCurveVolume(spineCurve, spineJoints, '%s_%s' % (self.chName, zone), self.mainCtr)
 
-            # connect to joint
-            plusMinusAverageToJoint.output1D.connect(joint.scaleY)
-            plusMinusAverageToJoint.output1D.connect(joint.scaleZ)
-
-    # save data
+        # save data
         self.joints[zone] = spineJoints
         self.ikControllers[zone] = spineIKControllerList
         self.fkControllers[zone] = spineFKControllerList
@@ -452,7 +431,7 @@ class RigAuto(object):
         # head orient base grp
         baseOrientAuto = pm.group(empty=True, name='%s_orientAuto_%s_head_base_1_grp' % (self.chName, zone))
         baseOrientAuto.setTranslation(neckOrientAuto.getTranslation('world'), 'world')
-        self.ctrGrp.addChild(baseOrientAuto)
+        self.mainCtr.addChild(baseOrientAuto)
 
         # create driver attr
         pm.addAttr(neckHeadIKCtrList[-1], longName='isolateOrient', shortName='isolateOrient', minValue=0.0,
@@ -548,18 +527,6 @@ class RigAuto(object):
             pointContraint.attr('%sW0' % str(ObjectUpVectorList[-1])).set(pointConstraintFactor)
             pointContraint.attr('%sW1' % str(ObjectUpVectorList[0])).set(1 - pointConstraintFactor)
 
-        # stretch squash neck
-        # curveInfo and connect neckHeadCurve
-        curveInfo = pm.createNode('curveInfo', name='%s_stretchSquash_%s_1_curveInfo' % (self.chName, zone))
-        neckHeadCurve.worldSpace[0].connect(curveInfo.inputCurve)
-        neckHeadCurveLength = neckHeadCurve.length()
-
-        # create anim curve to control scale influence
-        # maybe this is better to do with a curveAttr
-        scaleInfluenceCurve = pm.createNode('animCurveTU', name='%s_stretchSquash_%s_1_animCurve' % (self.chName, zone))
-        scaleInfluenceCurve.addKeyframe(0, 0.0)
-        scaleInfluenceCurve.addKeyframe((len(neckHeadJoints)-1)//2, 1.0)
-        scaleInfluenceCurve.addKeyframe(len(neckHeadJoints)-2, 0.0)
         for n, joint in enumerate(neckHeadJoints):
             # for each joint, create a multiply divide node
             # formula for scale: 1+(factorScale - 1)*influence
@@ -577,28 +544,8 @@ class RigAuto(object):
             else:
                 pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
 
-            multiplyDivide = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_1_multiplyDivide' % (self.chName, zone, jointNameSplit))
-            multiplyDivide.operation.set(2)
-            multiplyDivide.input1X.set(neckHeadCurveLength)
-            curveInfo.arcLength.connect(multiplyDivide.input2X)
-            plusMinusAverage = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_1_plusMinusAverage' % (self.chName, zone, jointNameSplit))
-            multiplyDivide.outputX.connect(plusMinusAverage.input1D[0])
-            plusMinusAverage.input1D[1].set(-1)
-            multiplyDivideInfluence = pm.createNode('multiplyDivide', name='%s_stretchSquash_%s_%s_2_multiplyDivide' % (self.chName, zone, jointNameSplit))
-            plusMinusAverage.output1D.connect(multiplyDivideInfluence.input1X)
-            # frame cache
-            frameCache = pm.createNode('frameCache', name='%s_stretchSquash_%s_%s_1_frameCache' % (self.chName, zone, jointNameSplit))
-            scaleInfluenceCurve.output.connect(frameCache.stream)
-            frameCache.varyTime.set(n)
-            frameCache.varying.connect(multiplyDivideInfluence.input2X)
-            # plus 1
-            plusMinusAverageToJoint = pm.createNode('plusMinusAverage', name='%s_stretchSquash_%s_%s_2_plusMinusAverage' % (self.chName, zone, jointNameSplit))
-            multiplyDivideInfluence.outputX.connect(plusMinusAverageToJoint.input1D[0])
-            plusMinusAverageToJoint.input1D[1].set(1)
-
-            # connect to joint
-            plusMinusAverageToJoint.output1D.connect(joint.scaleY)
-            plusMinusAverageToJoint.output1D.connect(joint.scaleZ)
+        # stretch
+        ARCore.stretchCurveVolume(neckHeadCurve, neckHeadJoints[:-1], '%s_%s' % (self.chName, zone), self.mainCtr)
 
         # save data
         self.joints[zone] = neckHeadJoints
@@ -629,7 +576,7 @@ class RigAuto(object):
 
         # group for leg controls
         self.legCtrGrp = pm.group(empty=True, name='%s_ik_%s_%s_ctrGrp_root' % (self.chName, zoneA, side))
-        self.ctrGrp.addChild(self.legCtrGrp)
+        self.mainCtr.addChild(self.legCtrGrp)
 
         # sync legTwistJoints index with leg joints index
         legTwistSyncJoints = ARCore.syncListsByKeyword(legJoints, self.legTwistJoints, 'twist')
@@ -661,7 +608,7 @@ class RigAuto(object):
                     legTwistIni[-2].addChild(legTwistIni[-1])
 
                 legTwistList.append(legTwistIni)  # append to list of tJoints
-                self.ctrGrp.addChild(legTwistIni[0])
+                self.mainCtr.addChild(legTwistIni[0])
 
                 # parent twist joints
                 if n == 0:
@@ -796,8 +743,8 @@ class RigAuto(object):
             # fk strech
             legFkrootsDistances, legMaxiumDistance = ARCore.calcDistances(self.legFkCtrRoots)  # review:  legIkJointList[0]   legIkCtrRoot
             #ikFkStretchSetup
-            ARCore.ikFkStretchSetup(self.legFkCtrRoots[1:], legFkrootsDistances, self.ikFkshape, [self.legIkJointList[0], ikHandle],
-                             legMaxiumDistance, self.legIkJointList[1:], self.legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zoneA, side), legPoleController)
+            ARCore.stretchIkFkSetup(self.legFkCtrRoots[1:], legFkrootsDistances, self.ikFkshape, [self.legIkJointList[0], ikHandle],
+                                    legMaxiumDistance, self.legIkJointList[1:], self.legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zoneA, side), self.mainCtr, legPoleController)
 
         # iterate along main joints
         # todo: visibility, connect to ikFkShape
