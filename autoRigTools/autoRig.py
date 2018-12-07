@@ -752,6 +752,7 @@ class RigAuto(object):
                                     legMaxiumDistance, self.legIkJointList[1:], self.legMainJointList[1:], legTwistList, '%s_%s_%s' % (self.chName, zoneA, side), self.mainCtr, legPoleController)
 
         # iterate along main joints
+        # blending
         # todo: visibility, connect to ikFkShape
         legPointControllers=[]
         for i, joint in enumerate(self.legMainJointList):
@@ -772,33 +773,68 @@ class RigAuto(object):
 
             # connect to deform skeleton review parent
             # conenct with twist joints
+            aimPointList=[]
             if self.legTwistJoints:
-                if len(legTwistList) > i:
+                if len(legTwistList) > i:  # exclude last twist joint, empty items of a list
+                    logger.debug('leg twist list: %s' % legTwistList)
                     for j, twistJnt in enumerate(legTwistList[i]):  # exclude first term review
+                        # leg joint or specific twist
                         skinJoint = legJoints[i] if j == 0 else legTwistSyncJoints[i][j-1]
+
                         nametype = 'main' if j == 0 else 'twist%s' % j
-                        # orient and scale, try aim
-                        #skinJointChild = skinJoint.childAtIndex(0)
-                        pm.orientConstraint(twistJnt, skinJoint, maintainOffset=False,name='%s_%s_%s_%s_%s_orientConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
+                        # orient and scale
+                        #pm.orientConstraint(twistJnt, skinJoint, maintainOffset=False,name='%s_%s_%s_%s_%s_orientConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
+                        aimGrp = pm.group(empty=True, name=str(skinJoint).replace('joint', 'main'))
+                        pm.xform(aimGrp, ws=True, m=pm.xform(skinJoint, ws=True, q=True, m=True))
+
+                        # connect orient to deform joints
+                        pm.orientConstraint(aimGrp, skinJoint, maintainOffset=False)
+
                         twistJnt.scaleY.connect(skinJoint.scaleY)
                         twistJnt.scaleZ.connect(skinJoint.scaleZ)
-                        # point
-                        if i>0 and j == 0:  # first joint not first twist chain
-                            twistJnt.rename(str(skinJoint).replace('joint', 'main'))
+
+                        aimPointList.append(aimGrp)
+
+                        # points two first
+                        if (i==0 and j==0):  # first joints
+                            parent.addChild(aimGrp)
+
+                        elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1):
+                            # last joints
+                            self.legIkControl.addChild(aimGrp)
+                            pm.aimConstraint(aimGrp, aimPointList[-2], aimVector=(skinJoint.translateX.get(), 0, 0),
+                                             worldUpType='objectrotation', worldUpObject=legPointControllers[-1])
+
+
+                        elif i > 0 and j == 0:  # first joint not first twist chain
                             pointController = legPointControllers[-1]
-                        elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1) or (i==0 and j==0):  # first and last joints
-                            twistJnt.rename(str(skinJoint).replace('joint', 'main'))  # rename, useful for snap proxy model
-                            pm.pointConstraint(twistJnt, skinJoint, maintainOffset=False, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
-                            continue
+                            pointController.addChild(aimGrp)
+
                         else:
                             pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zoneA, side, NameIdList[i]), '%sTwistPoint_%s' % (zoneA, side), 1, pointColor)
-                            pointController, rootPointController, pointConstraint, aimGrp = ARCore.jointPointToController([twistJnt], pointController)
+                            pointController, rootPointController, pointConstraint = ARCore.jointPointToController([twistJnt], pointController)
                             joint.addChild(rootPointController[0])
                             pointController = pointController[0]
                             legPointControllers.append(pointController)  # save to list
-                            pointController.rename(str(skinJoint).replace('joint', 'main'))  # rename, useful for snap proxy model
+                            pointController.addChild(aimGrp)
+                            # aim constraint
+                            if (i==0 and j==1):  # second joint, worlup object parent ctr
+                                # we need to know the side and if it is aligned with the z axis of the parent. so we use vector dot product
+                                jointVectorY = pm.xform(legJoints[i-1], ws=True, q=True, m=True)[4:7]  # y vector
+                                jointVectorY = OpenMaya.MVector(jointVectorY[0], jointVectorY[1], jointVectorY[2])
 
-                        pm.pointConstraint(pointController, skinJoint, maintainOffset=True, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
+                                parentVectorZ = pm.xform(parent, ws=True, q=True, m=True)[8:11]
+                                parentVectorZ = OpenMaya.MVector(parentVectorZ[0], parentVectorZ[1], parentVectorZ[2])
+                                # dot product and apply to z axis of the world up vector
+                                dotProduct = jointVectorY * parentVectorZ
+                                pm.aimConstraint(aimGrp, aimPointList[-2], aimVector=(skinJoint.translateX.get(), 0, 0),
+                                                 worldUpType='objectrotation', worldUpObject=parent, worldUpVector=(0,0,dotProduct))
+                            else:
+                                pm.aimConstraint(aimGrp, aimPointList[-2], aimVector=(skinJoint.translateX.get(),0,0), worldUpType='objectrotation', worldUpObject=legPointControllers[-2])
+
+                        pm.pointConstraint(aimGrp, skinJoint, maintainOffset=True, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
+
+
             else:
                 # connect to deform skeleton
                 joint.rename(str(legJoints[i]).replace('joint', 'main'))  # rename, useful for snap proxy model
@@ -1349,6 +1385,10 @@ class RigAuto(object):
 
         parent = self.legMainJointList[0].firstParent()  # get parent of the system
 
+        parentChilds = [child for child in parent.listRelatives(c=True, type='transform') if (side in str(child)) and (self.lastZone in str(child).lower()) and not ('pole' in str(child))]
+
+        logger.debug('childs: %s' %parentChilds)
+
         # store clavicle main joints here
         clavicleMainList = []
 
@@ -1368,7 +1408,7 @@ class RigAuto(object):
         clavicleMainList[-1].addChild(clavicleSwingCrt)
 
         # parent ikFk chains to swing
-        for ctr in (self.legMainJointList[0], self.legFkCtrRoots[0], self.legIkJointList[0]):
+        for ctr in (parentChilds):
             clavicleSwingCrt.addChild(ctr)
 
         # create roots

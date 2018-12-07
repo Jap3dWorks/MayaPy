@@ -93,20 +93,15 @@ def jointPointToController(joints, controller):
         controllerRoot = createRoots([controllerDup])[0]
         # point constraint
         parentConstraint = pm.parentConstraint(joint, controllerRoot)
-        # group aim
-        aimGrp = pm.group(empty=True)
-        controllerDup.addChild(aimGrp)
-        pm.xform(aimGrp, os=True, t=(0,0,0), ro=(0,0,0), s=(1,1,1))
 
         # append to lists
         controllerList.append(controllerDup)
         rootList.append(controllerRoot)
         pointConstraintList.append(parentConstraint)
-        aimGrpList.append(aimGrp)
         # lock attr
-        lockAndHideAttr(controllerDup, False, True, True)
+        lockAndHideAttr(controllerDup, False, False, True)
 
-    return controllerList, rootList, pointConstraintList, aimGrpList
+    return controllerList, rootList, pointConstraintList
 
 def lockAndHideAttr(obj, translate=False, rotate=False, scale=False):
     """
