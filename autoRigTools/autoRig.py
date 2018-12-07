@@ -777,9 +777,9 @@ class RigAuto(object):
             if self.legTwistJoints:
                 if len(legTwistList) > i:  # exclude last twist joint, empty items of a list
                     logger.debug('leg twist list: %s' % legTwistList)
-                    for j, twistJnt in enumerate(legTwistList[i]):  # exclude first term review
+                    for j, twistJnt in enumerate(legTwistList[i]):  # exclude first term review?
                         # leg joint or specific twist
-                        skinJoint = legJoints[i] if j == 0 else legTwistSyncJoints[i][j-1]
+                        skinJoint = legJoints[i] if j == 0 else legTwistSyncJoints[i][j-1]  # skined joints
 
                         nametype = 'main' if j == 0 else 'twist%s' % j
                         # orient and scale
@@ -801,7 +801,7 @@ class RigAuto(object):
 
                         elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1):
                             # last joints
-                            self.legIkControl.addChild(aimGrp)
+                            twistJnt.addChild(aimGrp)
                             pm.aimConstraint(aimGrp, aimPointList[-2], aimVector=(skinJoint.translateX.get(), 0, 0),
                                              worldUpType='objectrotation', worldUpObject=legPointControllers[-1])
 
@@ -818,17 +818,9 @@ class RigAuto(object):
                             legPointControllers.append(pointController)  # save to list
                             pointController.addChild(aimGrp)
                             # aim constraint
-                            if (i==0 and j==1):  # second joint, worlup object parent ctr
-                                # we need to know the side and if it is aligned with the z axis of the parent. so we use vector dot product
-                                jointVectorY = pm.xform(legJoints[i-1], ws=True, q=True, m=True)[4:7]  # y vector
-                                jointVectorY = OpenMaya.MVector(jointVectorY[0], jointVectorY[1], jointVectorY[2])
-
-                                parentVectorZ = pm.xform(parent, ws=True, q=True, m=True)[8:11]
-                                parentVectorZ = OpenMaya.MVector(parentVectorZ[0], parentVectorZ[1], parentVectorZ[2])
-                                # dot product and apply to z axis of the world up vector
-                                dotProduct = jointVectorY * parentVectorZ
+                            if (j==1):  # second joint, worldup object parent ctr
                                 pm.aimConstraint(aimGrp, aimPointList[-2], aimVector=(skinJoint.translateX.get(), 0, 0),
-                                                 worldUpType='objectrotation', worldUpObject=parent, worldUpVector=(0,0,dotProduct))
+                                                 worldUpType='objectrotation', worldUpObject=legTwistList[i][0])
                             else:
                                 pm.aimConstraint(aimGrp, aimPointList[-2], aimVector=(skinJoint.translateX.get(),0,0), worldUpType='objectrotation', worldUpObject=legPointControllers[-2])
 
