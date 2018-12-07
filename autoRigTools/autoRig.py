@@ -301,22 +301,24 @@ class RigAuto(object):
 
             jointNameSplit = str(joint).split('_')[1]  # review, maybe better store joints name in a list
 
+            # TODO: do this more legible if it is possible
             if re.match('.*(end|hips).*', str(joint)):
-                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False,
-                                    name='%s_drv_%s_%s_1_parentConstraint' % (
-                                        self.chName, zone, jointNameSplit))
+                # last joint and first joint connect to controller
+                # if hips, use de min val, zero. when end, n will be bigger than ik controllers, so use  the last ik controller.
+                spineIkCtrConstr = spineIKControllerList[min(n, len(spineIKControllerList)-1)]
+                spineIkCtrConstr.rename(str(joint).replace('joint', 'ctr'))  # rename ctr, useful for snap proxy model
+                # constraint
+                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False,  name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
                 endJointOrientConstraint = pm.orientConstraint(spineIKControllerList[min(n, len(spineIKControllerList)-1)], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
                 endJointOrientConstraint.interpType.set(0)
-                if 'end' in str(joint):
-                    continue
+
             else:
                 # connect to joints
                 # review: create parent constraints, once drivers have been created, if not, all flip
-                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True,
-                                    name='%s_drv_%s_%s_1_parentConstraint' % (
-                                    self.chName, zone, jointNameSplit))
+                jointDriverList[n].rename(str(joint).replace('joint', 'main'))  # rename driver, useful for snap proxy model
+                pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
 
-        # stretch
+        # stretch TODO: print spineJoints list
         ARCore.stretchCurveVolume(spineCurve, spineJoints, '%s_%s' % (self.chName, zone), self.mainCtr)
 
         # save data
@@ -539,9 +541,12 @@ class RigAuto(object):
             if re.match('.*head.*', str(joint)):
                 # head joint, with point to driver, and orient to controller
                 pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False, name='%s_drv_%s_%s_1_pointConstraint' % (self.chName, zone, jointNameSplit))
+                # orient to controller
+                neckHeadIKCtrList[-1].rename(str(joint).replace('joint', 'ctr'))  # rename, useful for snap proxy model
                 pm.orientConstraint(neckHeadIKCtrList[-1], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
 
             else:
+                jointDriverList[n].rename(str(joint).replace('joint', 'main'))  # rename, useful for snap proxy model
                 pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
 
         # stretch
@@ -772,26 +777,31 @@ class RigAuto(object):
                     for j, twistJnt in enumerate(legTwistList[i]):  # exclude first term review
                         skinJoint = legJoints[i] if j == 0 else legTwistSyncJoints[i][j-1]
                         nametype = 'main' if j == 0 else 'twist%s' % j
-                        # orient and scale
+                        # orient and scale, try aim
+                        #skinJointChild = skinJoint.childAtIndex(0)
                         pm.orientConstraint(twistJnt, skinJoint, maintainOffset=False,name='%s_%s_%s_%s_%s_orientConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
                         twistJnt.scaleY.connect(skinJoint.scaleY)
                         twistJnt.scaleZ.connect(skinJoint.scaleZ)
                         # point
-                        if i>0 and j == 0:
+                        if i>0 and j == 0:  # first joint not first twist chain
+                            twistJnt.rename(str(skinJoint).replace('joint', 'main'))
                             pointController = legPointControllers[-1]
-                        elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1) or (i==0 and j==0):
+                        elif (i == len(legTwistList)-1 and j == len(legTwistList[i])-1) or (i==0 and j==0):  # first and last joints
+                            twistJnt.rename(str(skinJoint).replace('joint', 'main'))  # rename, useful for snap proxy model
                             pm.pointConstraint(twistJnt, skinJoint, maintainOffset=False, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
                             continue
                         else:
                             pointController = self.create_controller('%s_%s_%s_%s_%s_ctr' % (self.chName, nametype, zoneA, side, NameIdList[i]), '%sTwistPoint_%s' % (zoneA, side), 1, pointColor)
-                            pointController, rootPointController, pointConstraint = ARCore.jointPointToController([twistJnt], pointController)
+                            pointController, rootPointController, pointConstraint, aimGrp = ARCore.jointPointToController([twistJnt], pointController)
                             joint.addChild(rootPointController[0])
                             pointController = pointController[0]
                             legPointControllers.append(pointController)  # save to list
+                            pointController.rename(str(skinJoint).replace('joint', 'main'))  # rename, useful for snap proxy model
 
                         pm.pointConstraint(pointController, skinJoint, maintainOffset=True, name='%s_%s_%s_%s_%s_pointConstraint' % (self.chName, nametype, zoneA, side, NameIdList[i]))
             else:
                 # connect to deform skeleton
+                joint.rename(str(legJoints[i]).replace('joint', 'main'))  # rename, useful for snap proxy model
                 pm.orientConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zoneA, side))
                 pm.pointConstraint(joint, legJoints[i], maintainOffset=False, name='%s_main_%s_%s_parentConstraint' % (self.chName, zoneA, side))
 
@@ -1124,13 +1134,14 @@ class RigAuto(object):
                 self.plusMinusIkFk.output1D.connect(footFkControllerList[i].getShape().visibility)
 
             else:
-                orientConstraint = pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zoneB, side))
+                pm.orientConstraint(footFkControllerList[i], mainJoint, maintainOffset=True, name='%s_%s_%s_%s_mainBlending_orientConstraint' % (self.chName, controllerName, zoneB, side))
 
             ARCore.lockAndHideAttr(footFkControllerList[i], True, False, False)
             pm.setAttr('%s.radi' % footFkControllerList[i], channelBox=False, keyable=False)
 
             # connect to deform skeleton
-            orientDeformConstraint = pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zoneB, side))
+            mainJoint.rename(str(footJoints[i]).replace('joint', 'main'))  # rename, useful for snap proxy model
+            pm.orientConstraint(mainJoint, footJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zoneB, side))
 
         ## TOES ##
         # main ik fk toes
@@ -1147,6 +1158,7 @@ class RigAuto(object):
             pm.setAttr('%s.radi' % toesFkControllerList[i], channelBox=False, keyable=False)
 
             # connect to deform skeleton, review: point constraint toes main. strange behaviour
+            mainJoint.rename(str(toesJoints[i]).replace('joint', 'main'))  # rename, useful for snap proxy model
             pm.orientConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zoneA, side))
             pm.pointConstraint(mainJoint, toesJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_pointConstraint' % (self.chName, controllerName, zoneA, side))
 
@@ -1254,7 +1266,7 @@ class RigAuto(object):
         self.legCtrGrp.addChild(handIkCtr)
         handIkControllerList.append(handIkCtr)  # append joint to list
 
-        for i in self.legIkControl.listRelatives(c=True, type='transform'):  # traspase childs from previous leg controller
+        for i in self.legIkControl.listRelatives(c=True, type='transform'):  # traspase childs from previous hand controller
             handIkCtr.addChild(i)
 
         pm.delete(self.legIkControl.firstParent())  # if foot, we do not need this controller
@@ -1296,6 +1308,7 @@ class RigAuto(object):
             pm.setAttr('%s.radi' % handFkControllerList[i], channelBox=False, keyable=False)
 
             # connect to deform skeleton
+            mainJoint.rename(str(handJoints[i]).replace('joint', 'main'))  # rename, useful for snap proxy model
             pm.orientConstraint(mainJoint, handJoints[i], maintainOffset=False, name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zoneB, side))
 
             ## finger ##
@@ -1305,14 +1318,24 @@ class RigAuto(object):
                 pm.setAttr('%s.radi' % mainJoint, channelBox=False, keyable=False)
 
                 # connect to deform skeleton, review: point constraint toes main. strange behaviour
+                mainJoint.rename(str(fingerJoints[i]).replace('joint', 'ctr'))
                 pm.orientConstraint(mainJoint, fingerJoints[i], maintainOffset=False,  name='%s_%s_%s_%s_joint_orientConstraint' % (self.chName, controllerName, zoneC, side))
                 pm.pointConstraint(mainJoint, fingerJoints[i], maintainOffset=False,  name='%s_%s_%s_%s_joint_pointConstraint' % (self.chName, controllerName, zoneC, side))
 
                 if '1' in controllerName:
                     for zeroJoint in fingerZeroJoints:
                         if controllerName[:-1] in str(zeroJoint):
-                            # todo: func aim creator, with upper vector
-                            pm.aimConstraint(mainJoint, zeroJoint, aimVector=(zeroJoint.translateX.get(),0,0), worldUpType='objectrotation', worldUpObject=str(handMainJointsList[-1]))
+                            # create null grp to snap roxy model
+                            fingerProxyNull = pm.group(empty=True, name=str(zeroJoint).replace('joint', 'main'))
+                            # copy transforms
+                            pm.xform(fingerProxyNull, ws=True, m=pm.xform(zeroJoint, ws=True, q=True, m=True))
+                            # find parent
+                            fingerParent = mainJoint.firstParent()
+                            fingerParent.addChild(fingerProxyNull)  # make child of parent of the finger
+                            # useful for snap proxy model
+                            pm.aimConstraint(mainJoint, fingerProxyNull, aimVector=(zeroJoint.translateX.get(),0,0), worldUpType='objectrotation', worldUpObject=str(handMainJointsList[-1]))
+                            # orient constraint, joint to froxy null
+                            pm.orientConstraint(fingerProxyNull, zeroJoint, maintainOffset=False)
 
 
             return handIkControllerList, handFkControllerList + fingerMainJointsList
@@ -1369,7 +1392,8 @@ class RigAuto(object):
 
         for i, joint in enumerate(clavicleJoints):
             pass
-            # connect to deform system
+            # connect to deform joints
+            clavicleMainList[i].rename(str(joint).replace('joint','ctr'))
             pm.pointConstraint(clavicleMainList[i], joint, maintainOffset=False)
             pm.orientConstraint(clavicleMainList[i], joint, maintainOffset=True)
 

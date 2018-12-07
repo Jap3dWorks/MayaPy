@@ -68,8 +68,8 @@ def renameObjects(name='name', objectType=None, zone=None, side=None, objects=No
     rename with name convention:
     name_objectType_zone_side_n_functionality
     p.e: platform_stick_floor01_left_2_locator
-    p.e: akona_IK_spine_chest_1_ctr
-    p.e: akona_twist_elbow_left_1_jnt
+    p.e: akona_chest_spine_IK_1_ctr
+    p.e: akona_foreArm_arm_left_twist_1_jnt
 
     Args:
         objects: list or tuple PyNode objects
