@@ -844,8 +844,6 @@ class RigAuto(object):
             self.legIkControllerList = self.legIkControllerList + ikControllers
             self.legFkControllersList = self.legFkControllersList + fkControllers
 
-        # delete ikfkShape
-
         # save Data
         # todo: save quaternions too if necessary
         zoneSide = '%s_%s' % (zoneA, side)
@@ -853,6 +851,9 @@ class RigAuto(object):
         self.ikControllers[zoneSide] = self.legIkControllerList
         self.fkControllers[zoneSide] = self.legFkControllersList
         self.ikHandles[zoneSide] = ikHandle
+
+        # delete ikfkShape
+        pm.delete(ikFkNode)
 
         return self.legIkControllerList, self.legFkControllersList
 
@@ -1398,10 +1399,13 @@ class RigAuto(object):
         clavicleSwingCrt = self.create_controller('%s_%s_%s_swing_fk_ctr' % (self.chName, zone, side), 'swingFk_%s' % side, 1, fkColor)
         pm.xform(clavicleSwingCrt, ws=True, m=pm.xform(clUpperArmJoint, q=True, ws=True, m=True))  # set transforms
         clavicleMainList[-1].addChild(clavicleSwingCrt)
+        clavicleMainList.append(clavicleSwingCrt)
 
         # parent ikFk chains to swing
         for ctr in (parentChilds):
             clavicleSwingCrt.addChild(ctr)
+        # swing visibility
+        self.plusMinusIkFk.output1D.connect(clavicleSwingCrt.getShape().visibility)
 
         # create roots
         ARCore.createRoots(clavicleMainList)
@@ -1410,7 +1414,7 @@ class RigAuto(object):
 
         # auto clavicle
         autoClavicleName = 'autoClavicleInfluence'
-        pm.addAttr(self.ikFkshape, longName=autoClavicleName, shortName=autoClavicleName, minValue=0.0, maxValue=1.0, type='float', defaultValue=0.5, k=True)
+        pm.addAttr(self.ikFkshape, longName=autoClavicleName, shortName=autoClavicleName, minValue=0.0, maxValue=1.0, type='float', defaultValue=0.3, k=True)
         # nodes drive rotation by influence
         clavicleMultiplyNode = pm.createNode('multiplyDivide', name='%s_%s_%s_multiply' % (self.chName, zone, side))
         # todo: expose autoClavicle
@@ -1423,12 +1427,12 @@ class RigAuto(object):
 
 
         for i, joint in enumerate(clavicleJoints):
-            pass
             # connect to deform joints
             clavicleMainList[i].rename(str(joint).replace('joint','ctr'))
             pm.pointConstraint(clavicleMainList[i], joint, maintainOffset=False)
             pm.orientConstraint(clavicleMainList[i], joint, maintainOffset=True)
 
+        return [], clavicleMainList
 
     def create_controller(self, name, controllerType, s=1.0, colorIndex=4):
         """
