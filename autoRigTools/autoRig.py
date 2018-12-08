@@ -308,13 +308,12 @@ class RigAuto(object):
                 spineIkCtrConstr = spineIKControllerList[min(n, len(spineIKControllerList)-1)]
                 spineIkCtrConstr.rename(str(joint).replace('joint', 'ctr'))  # rename ctr, useful for snap proxy model
                 # constraint
-                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False,  name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
+                pm.pointConstraint(jointDriverList[n], joint, maintainOffset=False,  name='%s_drv_%s_%s_1_pointConstraint' % (self.chName, zone, jointNameSplit))
                 endJointOrientConstraint = pm.orientConstraint(spineIKControllerList[min(n, len(spineIKControllerList)-1)], joint, maintainOffset=True, name='%s_drv_%s_%s_1_orientConstraint' % (self.chName, zone, jointNameSplit))
                 endJointOrientConstraint.interpType.set(0)
 
             else:
-                # connect to joints
-                # review: create parent constraints, once drivers have been created, if not, all flip
+                # connect to deform joints
                 jointDriverList[n].rename(str(joint).replace('joint', 'main'))  # rename driver, useful for snap proxy model
                 pm.parentConstraint(jointDriverList[n], joint, maintainOffset=True, name='%s_drv_%s_%s_1_parentConstraint' % (self.chName, zone, jointNameSplit))
 
