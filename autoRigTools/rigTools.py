@@ -270,3 +270,6 @@ def rootAutoGrps():
         # if not has parent, let it under world
         if parent:
             cmds.parent(rootgrp, parent)
+
+
+

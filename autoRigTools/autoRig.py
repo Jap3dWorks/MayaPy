@@ -573,6 +573,7 @@ class RigAuto(object):
         self.lastZone = zone  # review
         fkColor = 14 if side == 'left' else 29
         pointColor = 7 if side == 'left' else 5
+        # be careful with poseInterpolator
         legJoints = [point for point in pm.ls() if re.match('^%s.*(%s).(?!twist).*%s.*joint$' % (self.chName, zoneA, side), str(point).lower())]
         self.legTwistJoints = [point for point in pm.ls() if re.match('^%s.*(%s).(twist).*%s.*joint$' % (self.chName, zoneA, side), str(point).lower())]
         logger.debug('%s %s joints: %s' % (side, zoneA, legJoints))

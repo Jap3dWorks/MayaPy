@@ -6,7 +6,7 @@ from autoRigTools import autoRig
 #'D:/_docs/_Animum/Akona/skinCluster/akona_skin.ma'
 def model_import():
     cmds.file(new=True, force=True)
-    cmds.file('D:/_docs/_Animum/Akona/skinCluster/akona_skin.ma', i=True, force=True)
+    cmds.file('D:/_docs/_Animum/Akona/skinCluster/akona_skinPSD.ma', i=True, force=True)
     # cmds.setAttr('akona_model_grp.visibility', True)
 
 
