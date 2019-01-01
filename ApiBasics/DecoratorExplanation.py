@@ -129,3 +129,45 @@ class cubeCreator(object):
 cubecreatorvar = cubeCreator(10, 10, 10)
 cubecreatorvar.create_cube('francesca', side='right', world='earth')
 cubecreatorvar.create_sphere('manoly')
+
+from maya import cmds
+from functools import wraps
+from functools import partial
+import inspect
+
+checkTest = True
+
+
+# wrapper usefull for check methods
+def checkerFunc(func):
+    print 'checkerFunc'
+    print 'name of the func: %s' % func.__name__
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):  # arguments
+        print ('wrapper')
+        if not checkTest:
+            def noresult(*args, **kwards):
+                print 'no result'
+            return noresult
+        newFunc = func(*args, **kwargs)
+        return newFunc
+    return wrapper
+
+@checkerFunc
+def createCube(size, name):
+    cmds.polyCube(h=size, w=size, d=size, name=name)
+
+funlist = ['f01', 'f02']
+
+# class with func generator
+class attrTesting:
+    def __init__(self):
+        for i in funlist:
+            setattr(self, i, lambda: createCube(10, i))
+
+
+attrobject = attrTesting()
+attrobject.f01()
+
+
